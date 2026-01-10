@@ -1,10 +1,8 @@
-# 1) Build stage
-FROM gradle:8.8-jdk17 AS build
+FROM gradle:8.14-jdk17 AS build
 WORKDIR /app
 COPY . .
 RUN gradle clean bootJar -x test
 
-# 2) Run stage
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/build/libs/*.jar app.jar
