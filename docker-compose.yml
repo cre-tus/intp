@@ -9,8 +9,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       TZ: Asia/Seoul
-    ports:
-      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -18,13 +16,19 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
+    # 운영에서는 보통 DB 포트 외부 공개 안 함
+    # 필요하면 주석 해제:
+    # ports:
+    #   - "3307:3306"
 
   redis:
     image: redis:7
     container_name: infp-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # 운영에서는 보통 Redis 포트 외부 공개 안 함
+    # 필요하면 주석 해제:
+    # ports:
+    #   - "6379:6379"
 
   backend:
     build:
@@ -47,8 +51,38 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       TZ: Asia/Seoul
+    expose:
+      - "8080"
+    # 운영에서는 nginx만 외부에 열고, backend 포트는 안 열어도 됨
+    # 디버깅 필요하면 주석 해제:
+    # ports:
+    #   - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: infp-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Seoul
+    expose:
+      - "3000"
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    container_name: infp-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
     ports:
-      - "8080:8080"
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
   mysql_data:
