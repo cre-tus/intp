@@ -71,6 +71,8 @@ services:
       - "3000"
     depends_on:
       - backend
+    ports:
+      - "3000:3000"
 
   nginx:
     image: nginx:alpine
