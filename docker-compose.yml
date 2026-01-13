@@ -5,12 +5,11 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       TZ: Asia/Seoul
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./db/create.sql:/docker-entrypoint-initdb.d/create.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
@@ -18,8 +17,8 @@ services:
       retries: 30
     # 운영에서는 보통 DB 포트 외부 공개 안 함
     # 필요하면 주석 해제:
-    # ports:
-    #   - "3307:3306"
+    ports:
+    - "3307:3306"
 
   redis:
     image: redis:7

@@ -23,7 +23,7 @@
        stroke-linejoin="round" fill="none" opacity="0.9">
         <path d="M47.5 13 L47.5 5 L52.5 13 L52.5 5"/>
         <path d="M13 46 L13 54"/>
-        <path d="M87 46 L87 54 M87 46 L92 46 M87 50 L91 50"/>
+        <path d="M89 46 L89 54 M85 46 L93 46"/>
         <path d="M47.5 83 L47.5 93 M47.5 83 L51 83 Q52.5 83 52.5 85.5 Q52.5 88 51 88 L47.5 88" />
     </g>
 
