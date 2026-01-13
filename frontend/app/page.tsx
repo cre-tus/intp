@@ -2,10 +2,7 @@
 
 export default function Home() {
     return (
-        <html>
-            <body>
+        <main>{}</main>
 
-            </body>
-        </html>
-    );
+   );
 }
