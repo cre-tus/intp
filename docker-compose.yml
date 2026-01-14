@@ -64,14 +64,15 @@ services:
     container_name: infp-frontend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       TZ: Asia/Seoul
-    expose:
-      - "3000"
-    depends_on:
-      - backend
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev -- --webpack
 
   nginx:
     image: nginx:alpine
