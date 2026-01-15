@@ -18,3 +18,24 @@ a {
     will-change: transform;
     animation: marquee 12s linear infinite;
 }
+/* 다크모드 css */
+:root {
+    --bg-color: #ffffff;
+    --text-color: #000000;
+    --input-bg: #ffffff;
+    /* 폰트 추가   */
+    --font-infp: "YourFontName";
+}
+
+.dark-mode {
+    --bg-color: #1a1a1a;
+    --text-color: #f0f0f0;
+    --input-bg: #2d2d2d;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s, color 0.3s;
+    margin: 0;
+}
