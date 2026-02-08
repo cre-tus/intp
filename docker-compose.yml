@@ -41,6 +41,7 @@ services:
       redis:
         condition: service_started
     environment:
+      JWT_SECRET: ${JWT_SECRET}
       SPRING_PROFILES_ACTIVE: docker
       DB_HOST: mysql
       DB_PORT: 3306

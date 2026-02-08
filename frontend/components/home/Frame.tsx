@@ -1,7 +1,7 @@
 export default function Frame() {
     return (
         // ✅ 레이아웃용 wrapper (높이 확보)
-        <div className="relative w-full h-[160px]">
+        <div className="relative w-full h-[140px]">
             <div
                 className="
           absolute top-0 bottom-0

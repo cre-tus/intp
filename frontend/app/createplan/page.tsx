@@ -1,13 +1,14 @@
 import Header from "@/app/createplan/header";
 import HeroSection from "@/components/planner/HeroSection";
-
+import RequireAuth  from "@/components/requireAuth/RequireAuth";
 
 export default function Home() {
     return (
-        <main>
-            <Header />
-            <HeroSection />
-        </main>
-
+        <RequireAuth>
+            <main>
+                <Header/>
+                <HeroSection/>
+            </main>
+        </RequireAuth>
     );
 }

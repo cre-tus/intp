@@ -27,7 +27,14 @@ CREATE TABLE users (
                        id            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '사용자 PK',
                        email         VARCHAR(255)     NOT NULL COMMENT '로그인 식별 이메일(유니크)',
                        password_hash VARCHAR(255)     NOT NULL COMMENT '비밀번호 해시(평문 저장 금지)',
+                       first_name    VARCHAR(60)      NOT NULL COMMENT '사용자 성',
+                       last_name          VARCHAR(60)      NOT NULL COMMENT '사용자 이름',
                        nickname      VARCHAR(60)      NULL     COMMENT '표시 이름(닉네임)',
+
+                       refresh_token_hash VARCHAR(255) NULL COMMENT '리프레시 토큰 해시',
+                       refresh_token_expires_at DATETIME(6) NULL COMMENT '리프레시 만료 시각',
+
+                       birth         DATE             NULL     COMMENT '생년월일',
                        status        ENUM('ACTIVE','SUSPENDED','DELETED') NOT NULL DEFAULT 'ACTIVE' COMMENT '계정 상태',
                        created_at    DATETIME(6)      NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성 시각',
                        updated_at    DATETIME(6)      NOT NULL DEFAULT CURRENT_TIMESTAMP(6)

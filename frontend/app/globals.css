@@ -40,3 +40,35 @@ body {
     margin: 0;
 }
 
+{/* 기본 clock 아이콘 숨김 처리 */}
+@layer utilities {
+    .no-time-picker::-webkit-calendar-picker-indicator {
+        display: none;
+        -webkit-appearance: none;
+    }
+
+    .no-time-picker {
+        -moz-appearance: textfield;
+    }
+}
+
+{/* 기본 date 아이콘 숨김 처리 */}
+@layer utilities {
+    .no-date-picker::-webkit-calendar-picker-indicator {
+        opacity: 0;
+        display: none;
+    }
+
+    .no-date-picker {
+        -moz-appearance: textfield;
+    }
+}
+
+{/* 오류 애니메이션 */}
+@keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    50% { transform: translateX(2px); }
+    75% { transform: translateX(-2px); }
+    100% { transform: translateX(0); }
+}
