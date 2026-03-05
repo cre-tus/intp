@@ -1,52 +1,25 @@
-# INFP (Intelligent Navigation & Flow Planner)
+# INTP (Intelligent Navigation & Trip Planner)
 
 # 프로젝트 개요
 
-INFP는 사용자가 직접 구성한 여행 일정을 기반으로
-경로 최적화와 부족한 일정 추천을 제공하는 웹 기반 여행 플래너 서비스이다.
+프론트 : Next.js
+백엔드 : Spring Boot
+웹서버 : nginx
+DB : PostGIS, MySQL, MongoDB
+Cache : Redis
 
-사용자가 만든 일정의 이동 흐름을 분석하여
-불필요한 이동을 줄이고, 하루 동선이 자연스럽게 이어지도록 재정렬한다.
+## Open Source Acknowledgements
 
-# 핵심 기능
-1. 여행 일정 관리
-
-여행(Trip) 단위로 일정 생성
-
-날짜(Day)별 방문 장소(POI) 관리
-
-숙소 → 숙소 형태의 하루 일정 구성
-
-2. 경로 최적화
-
-방문 장소들의 순서를 자동으로 재정렬
-
-이동 거리/시간을 최소화하는 경로 생성
-
-탐욕 알고리즘 + 2-opt 기반 일정 개선
-
-3. 일정 추천 (룰 기반)
-
-일정 중 비어 있는 시간 구간 탐지
-
-현재 위치와 동선을 고려한 장소 추천
-
-추천 결과를 실제 일정에 적용했을 때의 효율을 기준으로 랭킹
-
-4. 캐시 기반 성능 최적화
-
-Redis를 활용한 이동 비용(거리/시간) 캐싱
-
-동일한 경로 계산 반복 호출 방지
-
-# 기술 스택
-Spring Boot
-MySQL: 핵심 도메인 데이터 저장
-Redis: 경로 계산 및 추천 결과 캐시
+This project makes use of the following open-source software and datasets:
 
 
+- **OpenStreetMap**
+    - © OpenStreetMap contributors
+    - https://www.openstreetmap.org/
+    - Data licensed under the Open Database License (ODbL).
 
-향후 확장 계획
-사용자 행동 로그 기반 개인화 추천
-여행자 보험 여부 확인 및 여행 리스크 안내
-일정 공유 및 다른 사용자의 여행 계획 참고 기능
+- **ODPT (Public Transportation Open Data Center, Japan)**
+    - https://www.odpt.org/
+    - Used for public transportation timetable and operational data.
+    - Data accuracy is not guaranteed by the provider.
+

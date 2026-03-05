@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const TEXTS = ["푸드 트립", "인기 있는 여행지", "나만의 여행 계획", "서현우 화이팅"];
+const TEXTS = ["푸드 트립", "인기 있는 여행지", "나만의 여행 계획", "개발 중..."];
 
 export default function TypingText() {
     const [textIndex, setTextIndex] = useState(0);

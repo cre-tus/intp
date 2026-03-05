@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import DayCard from "./DayCard";
+import SortableDayCard from "@/components/planner/Sortable/SortableDayCard";
+import {closestCenter, DndContext, DragEndEvent} from "@dnd-kit/core";
+import {arrayMove, SortableContext, verticalListSortingStrategy} from "@dnd-kit/sortable";
 
 { /* 데이터 타입 */ }
 export interface ItineraryActivity {
@@ -202,6 +204,7 @@ export default function TravelItinerary() {
         el?.showPicker?.();
     };
 
+    {/* input 포커스 제어 */}
     const focusTime = (activityId: string) => {
         const el = timeInputRefs.current.get(activityId);
         el?.focus();
@@ -226,6 +229,30 @@ export default function TravelItinerary() {
         });
     };
 
+    { /* 드래그 앤 드랍 이벤트 핸들러 */ }
+    const handleDayDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        setDays((prev) => {
+            const oldIndex = prev.findIndex((d) => d.id === active.id);
+            const newIndex = prev.findIndex((d) => d.id === over.id);
+            if (oldIndex < 0 || newIndex < 0) return prev;
+            return arrayMove(prev, oldIndex, newIndex);
+        });
+    };
+
+    { /* 활동 인덱스 재설정 */ }
+    const reorderActivities = (dayId: string, oldIndex: number, newIndex: number) => {
+        setDays((prev) =>
+            prev.map((d) =>
+                d.id === dayId
+                    ? { ...d, activities: arrayMove(d.activities, oldIndex, newIndex) }
+                    : d
+            )
+        );
+    };
+
 
     return (
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -241,32 +268,41 @@ export default function TravelItinerary() {
             </div>
 
             <div className="p-6 space-y-6 bg-gradient-to-b from-gray-50 to-white">
-                {days.map((day, dayIndex) => (
-                    <DayCard
-                        key={day.id}
-                        day={day}
-                        dayIndex={dayIndex}
-                        timeErrors={timeErrors}
-                        registerDateRef={(dayId, el) => {
-                            if (!el) dateInputRefs.current.delete(dayId);
-                            else dateInputRefs.current.set(dayId, el);
-                        }}
-                        registerTimeRef={(activityId, el) => {
-                            if (!el) timeInputRefs.current.delete(activityId);
-                            else timeInputRefs.current.set(activityId, el);
-                        }}
-                        onFocusDate={focusDate}
-                        onFocusTime={focusTime}
-                        onRemoveDay={removeDay}
-                        onUpdateDayTitle={updateDayTitle}
-                        onUpdateDayDate={updateDayDate}
-                        onAddActivity={addActivity}
-                        onRemoveActivity={removeActivity}
-                        onUpdateActivityField={updateActivityField}
-                        onSetActivityTime={setTimeForActivity}
-                        onClearTimeError={clearTimeError}
-                    />
-                ))}
+                <DndContext collisionDetection={closestCenter} onDragEnd={handleDayDragEnd}>
+                    <SortableContext
+                        items={days.map((d) => d.id)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        {days.map((day, dayIndex) => (
+                            <SortableDayCard
+                                key={day.id}
+                                day={day}
+                                dayIndex={dayIndex}
+                                timeErrors={timeErrors}
+                                registerDateRef={(dayId, el) => {
+                                    if (!el) dateInputRefs.current.delete(dayId);
+                                    else dateInputRefs.current.set(dayId, el);
+                                }}
+                                registerTimeRef={(activityId, el) => {
+                                    if (!el) timeInputRefs.current.delete(activityId);
+                                    else timeInputRefs.current.set(activityId, el);
+                                }}
+                                onFocusDate={focusDate}
+                                onFocusTime={focusTime}
+                                onRemoveDay={removeDay}
+                                onUpdateDayTitle={updateDayTitle}
+                                onUpdateDayDate={updateDayDate}
+                                onAddActivity={addActivity}
+                                onRemoveActivity={removeActivity}
+                                onUpdateActivityField={updateActivityField}
+                                onSetActivityTime={setTimeForActivity}
+                                onClearTimeError={clearTimeError}
+                                onReorderActivities={reorderActivities}
+
+                            />
+                        ))}
+                    </SortableContext>
+                </DndContext>
 
                 <button
                     onClick={addDay}
