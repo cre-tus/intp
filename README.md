@@ -23,3 +23,5 @@ This project makes use of the following open-source software and datasets:
     - Used for public transportation timetable and operational data.
     - Data accuracy is not guaranteed by the provider.
 
+## MySQL DB 데이터 접근
+docker exec -it infp-mysql mysql -uroot -p비밀번호 infp
