@@ -2,15 +2,23 @@ package com.infp.place.service;
 
 import com.infp.place.client.NominatimClient;
 import com.infp.place.dto.PlaceItem;
+import com.infp.place.util.Geo;
 import com.infp.place.util.QueryVariantBuilder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @Service
 public class PlaceAutocompleteService {
+
+    // 좌표 정규화 로그 테스트
+    private static final Logger log = LoggerFactory.getLogger(PlaceAutocompleteService.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Nominatim 외부 호출 전담 클라이언트
@@ -93,13 +101,21 @@ public class PlaceAutocompleteService {
                 .map(map -> {
                     List<PlaceItem> out = new ArrayList<>(map.values());
 
-                    // importance 높은 순으로 정렬
+                    // 🔹 importance 기준 정렬
                     out.sort(
                             Comparator.comparingDouble(PlaceItem::importance)
                                     .reversed()
                     );
 
-                    // 최종 15개 제한 (원하면 조절)
+                    // 🔹 JSON 로그 출력 (여기 추가)
+                    try {
+                        String json = objectMapper.writeValueAsString(out);
+                        log.info("🔥 Nominatim → PlaceItem 변환 결과(JSON): {}", json);
+                    } catch (Exception e) {
+                        log.error("JSON 변환 실패", e);
+                    }
+
+                    // 🔹 상위 15개 제한
                     return out.size() > 15
                             ? out.subList(0, 15)
                             : out;
@@ -137,9 +153,11 @@ public class PlaceAutocompleteService {
                     ? name
                     : firstToken(display);
 
-            // 🔹 위경도 파싱
-            double lat = toDouble(r.get("lat"));
-            double lon = toDouble(r.get("lon"));
+
+            // 🔹 위경도 파싱 + 소수점 4자리 정규화
+            // Nominatim은 문자열로 주기 때문에 toDouble로 변환 후 normalize
+            double lat = Geo.normalize(toDouble(r.get("lat")));
+            double lon = Geo.normalize(toDouble(r.get("lon")));
 
             // 🔹 importance (Nominatim 랭킹 값)
             double importance = toDouble(

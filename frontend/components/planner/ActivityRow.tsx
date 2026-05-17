@@ -11,7 +11,7 @@ type ActivityError = { message: string } | null;
 
 type DragHandleProps = {
     attributes?: React.HTMLAttributes<HTMLElement>;
-    listeners?: Record<string, any>;
+    listeners?: React.HTMLAttributes<HTMLElement>;
     setActivatorNodeRef?: (el: HTMLElement | null) => void;
 };
 
@@ -68,9 +68,11 @@ export default function ActivityRow(props: {
                 onClose={() => setPlaceOpen(false)}
                 initialQuery={activity.location}
                 onSelect={(p) => {
-                    // title만 저장 (원하면 display_name 넣어도 됨)
                     props.onChangeField("location", p.title);
-                    // 좌표도 저장하고 싶으면 activity 타입부터 바꿔야 함
+                    props.onChangeField("placeId", p.id);
+                    props.onChangeField("placeSubtitle", p.subtitle);
+                    props.onChangeField("lat", p.lat);
+                    props.onChangeField("lon", p.lon);
                 }}
             />
 

@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import SortableDayCard from "@/components/planner/Sortable/SortableDayCard";
 import {closestCenter, DndContext, DragEndEvent} from "@dnd-kit/core";
 import {arrayMove, SortableContext, verticalListSortingStrategy} from "@dnd-kit/sortable";
+import MapRoutePanel from "@/components/planner/MapRoutePanel";
 
 { /* 데이터 타입 */ }
 export interface ItineraryActivity {
@@ -12,6 +13,13 @@ export interface ItineraryActivity {
     location: string; // 장소
     activity: string; // 활동 내용
     cost: number; //비용
+}
+
+export interface ItineraryActivity {
+    placeId?: string;
+    placeSubtitle?: string;
+    lat?: number;
+    lon?: number;
 }
 
 export interface ItineraryDay {
@@ -323,6 +331,8 @@ export default function TravelItinerary() {
                         </div>
                     </div>
                 )}
+
+                <MapRoutePanel days={days} />
             </div>
         </div>
     );
