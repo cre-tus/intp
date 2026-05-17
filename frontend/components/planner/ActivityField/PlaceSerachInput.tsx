@@ -1,9 +1,8 @@
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
-{ /* 장소 검색용 데이터 타입 */ }
 export type PlaceResult = {
-    id: string; // Nominatim place_id (리스트 key / 중복 제거 )
+    id: string;
     title: string;
     subtitle: string;
     lat: number;
@@ -18,85 +17,78 @@ type PlaceApiResult = {
     lon: number | string;
 };
 
-{ /* 장소 검색 입력 컴포넌트 */ }
 export default function PlaceSearchInput(props: {
     onSelect: (place: PlaceResult) => void;
     initialQuery?: string;
 }) {
-
-    { /* 현재 검색어 상태 */ }
     const [q, setQ] = useState(props.initialQuery ?? "");
-
-    { /* 검색 결과 목록 */ }
     const [items, setItems] = useState<PlaceResult[]>([]);
-
-    { /* 검색 중 여부 */ }
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
 
-    { /* 검색어 변경마다 실행 */ }
     useEffect(() => {
-
-        // 공백 시 결과 초기화
         if (!q.trim()) {
-            const t = setTimeout(() => setItems([]), 0);
-            return () => clearTimeout(t);
+            const timer = setTimeout(() => setItems([]), 0);
+            return () => clearTimeout(timer);
         }
 
-        //디바운스 타이머 설정
-        const t = setTimeout(async () => {
+        const timer = setTimeout(async () => {
             setLoading(true);
-
-            // nginx / backend 프록시를 통해 검색
-            const res = await fetch(`/api/place/autocomplete?q=${encodeURIComponent(q)}`);
-            const data = await res.json() as PlaceApiResult[];
-
-            // Nominatim 응답을 PlaceResult 형태로 정규화
-            setItems(
-                data.map((r) => ({
-                    id: r.id,
-                    title: r.title,
-                    subtitle: r.subtitle,
-                    lat: Number(r.lat),
-                    lon: Number(r.lon),
-                }))
-            );
-
-            setLoading(false);
+            setError("");
+            try {
+                const res = await fetch(`/api/place/autocomplete?q=${encodeURIComponent(q)}`);
+                if (!res.ok) throw new Error("장소 검색에 실패했습니다.");
+                const data = await res.json() as PlaceApiResult[];
+                setItems(
+                    data.map((item) => ({
+                        id: item.id,
+                        title: item.title,
+                        subtitle: item.subtitle,
+                        lat: Number(item.lat),
+                        lon: Number(item.lon),
+                    }))
+                );
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "장소 검색에 실패했습니다.");
+            } finally {
+                setLoading(false);
+            }
         }, 250);
 
-        // q 변경 시 이전 타이머 취소 (디바운스 핵심)
-        return () => clearTimeout(t);
+        return () => clearTimeout(timer);
     }, [q]);
 
-    { /* 컴포넌트 부분 */ }
     return (
         <>
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                <Search className="w-4 h-4 text-gray-500" />
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <Search className="h-4 w-4 text-gray-500" />
                 <input
                     autoFocus
                     value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="예) 도쿄 타워 / 도쿄디즈니랜드"
+                    onChange={(event) => setQ(event.target.value)}
+                    placeholder="예: 신주쿠 역, 우에노 공원"
                     className="w-full bg-transparent focus:outline-none"
                 />
             </div>
 
-            <div className="mt-3 max-h-[320px] overflow-auto border border-gray-200 rounded-lg">
+            <div className="mt-3 max-h-[320px] overflow-auto rounded-lg border border-gray-200">
                 {loading ? (
                     <div className="p-4 text-sm text-gray-500">검색 중...</div>
+                ) : error ? (
+                    <div className="p-4 text-sm text-red-600">{error}</div>
                 ) : items.length === 0 ? (
                     <div className="p-4 text-sm text-gray-500">검색 결과 없음</div>
                 ) : (
                     <ul>
-                        {items.map((it) => (
-                            <li key={it.id}>
+                        {items.map((item) => (
+                            <li key={item.id}>
                                 <button
-                                    className="w-full text-left px-3 py-3 hover:bg-gray-50 border-b last:border-b-0"
-                                    onClick={() => props.onSelect(it)}
+                                    type="button"
+                                    className="w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-gray-50"
+                                    onClick={() => props.onSelect(item)}
                                 >
-                                    <div className="font-medium">{it.title}</div>
-                                    <div className="text-xs text-gray-500 mt-0.5">{it.subtitle}</div>
+                                    <div className="font-medium">{item.title}</div>
+                                    <div className="mt-0.5 text-xs text-gray-500">{item.subtitle}</div>
                                 </button>
                             </li>
                         ))}

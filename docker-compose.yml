@@ -23,6 +23,28 @@ services:
     container_name: infp-redis
     restart: unless-stopped
 
+  gtfs-postgis:
+    image: postgis/postgis:16-3.4
+    container_name: infp-gtfs-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${GTFS_POSTGRES_DB:-gtfs}
+      POSTGRES_USER: ${GTFS_POSTGRES_USER:-gtfs}
+      POSTGRES_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
+      TZ: Asia/Seoul
+    volumes:
+      - gtfs_postgis_data:/var/lib/postgresql/data
+      - ./db/postgis_create.sql:/docker-entrypoint-initdb.d/01_postgis_create.sql:ro
+      - ./db/postgis_insert.sql:/docker-entrypoint-initdb.d/02_postgis_insert.sql:ro
+      - ./db/gtfs/tokyo_rail:/gtfs/tokyo_rail:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    ports:
+      - "5433:5432"
+
   backend:
     build:
       context: .
@@ -34,6 +56,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      gtfs-postgis:
+        condition: service_healthy
     environment:
       JWT_SECRET: ${JWT_SECRET}
       SPRING_PROFILES_ACTIVE: docker
@@ -44,6 +68,11 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      GTFS_DB_HOST: gtfs-postgis
+      GTFS_DB_PORT: 5432
+      GTFS_DB_NAME: ${GTFS_POSTGRES_DB:-gtfs}
+      GTFS_DB_USER: ${GTFS_POSTGRES_USER:-gtfs}
+      GTFS_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
       TZ: Asia/Seoul
     ports:
       - "8080:8080"
@@ -105,3 +134,4 @@ services:
 
 volumes:
   mysql_data:
+  gtfs_postgis_data:
