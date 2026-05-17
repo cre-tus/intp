@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 export type PlaceResult = {
     id: string;
     title: string;
+    displayTitle?: string;
+    titleKo?: string;
+    titleEn?: string;
+    titleJa?: string;
     subtitle: string;
     lat: number;
     lon: number;
@@ -12,6 +16,10 @@ export type PlaceResult = {
 type PlaceApiResult = {
     id: string;
     title: string;
+    displayTitle?: string;
+    titleKo?: string;
+    titleEn?: string;
+    titleJa?: string;
     subtitle: string;
     lat: number | string;
     lon: number | string;
@@ -43,6 +51,10 @@ export default function PlaceSearchInput(props: {
                     data.map((item) => ({
                         id: item.id,
                         title: item.title,
+                        displayTitle: item.displayTitle,
+                        titleKo: item.titleKo,
+                        titleEn: item.titleEn,
+                        titleJa: item.titleJa,
                         subtitle: item.subtitle,
                         lat: Number(item.lat),
                         lon: Number(item.lon),
@@ -87,7 +99,7 @@ export default function PlaceSearchInput(props: {
                                     className="w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-gray-50"
                                     onClick={() => props.onSelect(item)}
                                 >
-                                    <div className="font-medium">{item.title}</div>
+                                    <div className="font-medium">{item.displayTitle ?? item.title}</div>
                                     <div className="mt-0.5 text-xs text-gray-500">{item.subtitle}</div>
                                 </button>
                             </li>

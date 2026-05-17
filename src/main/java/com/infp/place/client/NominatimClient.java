@@ -25,6 +25,8 @@ public class NominatimClient {
                         .path("/search")
                         .queryParam("format", "jsonv2")
                         .queryParam("limit", 6)
+                        .queryParam("namedetails", 1)
+                        .queryParam("accept-language", "ko,en,ja")
                         .queryParam("q", query)
                         .build())
                 .retrieve()
