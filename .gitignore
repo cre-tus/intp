@@ -44,3 +44,8 @@ out/
 frontend/node_modules/
 frontend/dist/
 node_modules/
+
+# Local map/search/GTFS data volumes
+db/gtfs/
+nominatim/
+tiles/
