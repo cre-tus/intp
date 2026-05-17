@@ -6,6 +6,7 @@ import ActivityField from "@/components/planner/ActivityField/ActivityField";
 import CostField from "@/components/planner/ActivityField/CostField";
 import DeleteButton from "@/components/planner/ActivityField/DeleteButton";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
+import { Pin } from "lucide-react";
 
 type ActivityError = { message: string } | null;
 
@@ -54,6 +55,22 @@ export default function ActivityRow(props: {
             />
 
             <LocationField value={activity.location} onOpen={() => setPlaceOpen(true)} />
+
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <Pin className="h-4 w-4 flex-shrink-0 text-gray-600" />
+                <select
+                    value={activity.routeRole ?? "NONE"}
+                    onChange={(event) => props.onChangeField("routeRole", event.target.value)}
+                    className="bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
+                    title="경로 고정"
+                >
+                    <option value="NONE">일반</option>
+                    <option value="LODGING">숙소 왕복</option>
+                    <option value="START">출발 고정</option>
+                    <option value="END">도착 고정</option>
+                    <option value="FIXED">예약 고정</option>
+                </select>
+            </div>
 
             <PlaceSearchModal
                 open={placeOpen}
