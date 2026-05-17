@@ -148,10 +148,28 @@ public class PlaceAutocompleteService {
 
             // 🔹 name 필드가 있으면 그걸 제목으로 사용
             // 없으면 display_name의 첫 토큰 사용
+            Map<String, Object> names = asMap(r.get("namedetails"));
             String name = str(r.get("name"));
-            String title = !name.isBlank()
+            String titleKo = firstPresent(
+                    names.get("name:ko"),
+                    names.get("name:ko_rm"),
+                    names.get("name:ko-Latn")
+            );
+            String titleEn = firstPresent(
+                    names.get("name:en"),
+                    names.get("int_name"),
+                    names.get("official_name:en")
+            );
+            String titleJa = firstPresent(
+                    names.get("name:ja"),
+                    names.get("name")
+            );
+            String title = !titleKo.isBlank()
+                    ? titleKo
+                    : !name.isBlank()
                     ? name
                     : firstToken(display);
+            String displayTitle = buildDisplayTitle(title, titleKo, titleEn, titleJa);
 
 
             // 🔹 위경도 파싱 + 소수점 4자리 정규화
@@ -170,6 +188,10 @@ public class PlaceAutocompleteService {
             out.add(new PlaceItem(
                     id,
                     title,
+                    displayTitle,
+                    titleKo,
+                    titleEn,
+                    titleJa,
                     display,
                     lat,
                     lon,
@@ -202,6 +224,33 @@ public class PlaceAutocompleteService {
      */
     private static String str(Object v) {
         return v == null ? "" : String.valueOf(v);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> asMap(Object v) {
+        return v instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
+
+    private static String firstPresent(Object... values) {
+        for (Object value : values) {
+            String s = str(value).trim();
+            if (!s.isBlank()) return s;
+        }
+        return "";
+    }
+
+    private static String buildDisplayTitle(String title, String titleKo, String titleEn, String titleJa) {
+        String main = !titleKo.isBlank() ? titleKo : title;
+        List<String> originals = new ArrayList<>();
+        if (!titleEn.isBlank() && !titleEn.equalsIgnoreCase(main)) {
+            originals.add(titleEn);
+        }
+        if (!titleJa.isBlank() && !titleJa.equals(main) && originals.stream().noneMatch(titleJa::equalsIgnoreCase)) {
+            originals.add(titleJa);
+        }
+        return originals.isEmpty()
+                ? main
+                : main + " (" + String.join(", ", originals) + ")";
     }
 
     /**
