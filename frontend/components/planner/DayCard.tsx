@@ -1,7 +1,6 @@
 import React from "react";
 import { Calendar, Trash2, Plus, GripVertical } from "lucide-react";
 import type { ItineraryDay, ItineraryActivity } from "./TravelItinerary";
-import ActivityRow from "./ActivityRow";
 import SortableActivityRow from "@/components/planner/Sortable/SortableActivityRow";
 import {closestCenter, DndContext, DragEndEvent} from "@dnd-kit/core";
 import {SortableContext, verticalListSortingStrategy} from "@dnd-kit/sortable";
@@ -10,7 +9,7 @@ type ActivityError = { message: string } | null;
 
 type DragHandleProps = {
     attributes?: React.HTMLAttributes<HTMLElement>;
-    listeners?: Record<string, any>;
+    listeners?: React.HTMLAttributes<HTMLElement>;
     setActivatorNodeRef?: (el: HTMLElement | null) => void;
 };
 

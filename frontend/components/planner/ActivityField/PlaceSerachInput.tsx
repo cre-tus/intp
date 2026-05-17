@@ -10,6 +10,14 @@ export type PlaceResult = {
     lon: number;
 };
 
+type PlaceApiResult = {
+    id: string;
+    title: string;
+    subtitle: string;
+    lat: number | string;
+    lon: number | string;
+};
+
 { /* 장소 검색 입력 컴포넌트 */ }
 export default function PlaceSearchInput(props: {
     onSelect: (place: PlaceResult) => void;
@@ -30,8 +38,8 @@ export default function PlaceSearchInput(props: {
 
         // 공백 시 결과 초기화
         if (!q.trim()) {
-            setItems([]);
-            return;
+            const t = setTimeout(() => setItems([]), 0);
+            return () => clearTimeout(t);
         }
 
         //디바운스 타이머 설정
@@ -39,17 +47,15 @@ export default function PlaceSearchInput(props: {
             setLoading(true);
 
             // nginx / backend 프록시를 통해 검색
-            const res = await fetch(
-                `/api/nominatim/search?format=jsonv2&limit=5&q=${encodeURIComponent(q)}`
-            );
-            const data = await res.json();
+            const res = await fetch(`/api/place/autocomplete?q=${encodeURIComponent(q)}`);
+            const data = await res.json() as PlaceApiResult[];
 
             // Nominatim 응답을 PlaceResult 형태로 정규화
             setItems(
-                data.map((r: any) => ({
-                    id: r.place_id,
-                    title: r.name || r.display_name.split(",")[0],
-                    subtitle: r.display_name,
+                data.map((r) => ({
+                    id: r.id,
+                    title: r.title,
+                    subtitle: r.subtitle,
                     lat: Number(r.lat),
                     lon: Number(r.lon),
                 }))
