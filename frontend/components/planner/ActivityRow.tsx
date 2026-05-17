@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, { useState } from "react";
 import type { ItineraryActivity } from "./TravelItinerary";
 import TimeField from "@/components/planner/ActivityField/TimeField";
 import LocationField from "@/components/planner/ActivityField/LocationField";
@@ -20,29 +20,24 @@ export default function ActivityRow(props: {
     activity: ItineraryActivity;
     index: number;
     error: ActivityError;
-
     registerTimeRef: (activityId: string, el: HTMLInputElement | null) => void;
     onFocusTime: (activityId: string) => void;
-
     onRemove: () => void;
     onChangeTime: (next: string) => void;
     onChangeField: (field: keyof ItineraryActivity, value: string | number) => void;
-
     onClearTimeError: (activityId: string) => void;
-
-    dragHandleProps?: DragHandleProps; // ✅ 추가
+    dragHandleProps?: DragHandleProps;
 }) {
     const { activity, index, error } = props;
     const [placeOpen, setPlaceOpen] = useState(false);
 
     return (
-        <div className="flex gap-3 items-center group bg-white p-3 rounded-lg border border-gray-200 hover:border-gray-900 hover:shadow-md transition-all">
-            {/* ✅ 번호 = 드래그 핸들 */}
+        <div className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md">
             <div
                 ref={(el) => props.dragHandleProps?.setActivatorNodeRef?.(el)}
                 {...(props.dragHandleProps?.attributes ?? {})}
                 {...(props.dragHandleProps?.listeners ?? {})}
-                className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-gray-900 to-gray-700 text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm cursor-grab active:cursor-grabbing select-none"
+                className="flex h-8 w-8 flex-shrink-0 cursor-grab select-none items-center justify-center rounded-full bg-gradient-to-br from-gray-900 to-gray-700 text-sm font-bold text-white shadow-sm active:cursor-grabbing"
                 aria-label="일정 순서 변경"
             >
                 {index + 1}
@@ -58,34 +53,24 @@ export default function ActivityRow(props: {
                 onClearError={() => props.onClearTimeError(activity.id)}
             />
 
-            <LocationField
-                value={activity.location}
-                onOpen={() => setPlaceOpen(true)}
-            />
+            <LocationField value={activity.location} onOpen={() => setPlaceOpen(true)} />
 
             <PlaceSearchModal
                 open={placeOpen}
                 onClose={() => setPlaceOpen(false)}
                 initialQuery={activity.location}
-                onSelect={(p) => {
-                    props.onChangeField("location", p.title);
-                    props.onChangeField("placeId", p.id);
-                    props.onChangeField("placeSubtitle", p.subtitle);
-                    props.onChangeField("lat", p.lat);
-                    props.onChangeField("lon", p.lon);
+                onSelect={(place) => {
+                    props.onChangeField("location", place.title);
+                    props.onChangeField("placeId", place.id);
+                    props.onChangeField("placeSubtitle", place.subtitle);
+                    props.onChangeField("lat", place.lat);
+                    props.onChangeField("lon", place.lon);
+                    setPlaceOpen(false);
                 }}
             />
 
-            <ActivityField
-                value={activity.activity}
-                onChange={(next) => props.onChangeField("activity", next)}
-            />
-
-            <CostField
-                value={activity.cost}
-                onChange={(next) => props.onChangeField("cost", next)}
-            />
-
+            <ActivityField value={activity.activity} onChange={(next) => props.onChangeField("activity", next)} />
+            <CostField value={activity.cost} onChange={(next) => props.onChangeField("cost", next)} />
             <DeleteButton onClick={props.onRemove} />
         </div>
     );
