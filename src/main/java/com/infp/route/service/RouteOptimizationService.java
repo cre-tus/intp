@@ -135,13 +135,14 @@ public class RouteOptimizationService {
             used.add(start);
         }
 
+        int cursor = 0;
         for (RoutePoint anchor : anchors) {
             if (used.contains(anchor) && anchor != end) continue;
             RoutePoint previousAnchor = route.isEmpty() ? null : route.get(route.size() - 1);
-            List<RoutePoint> segment = points.stream()
+            int anchorIndex = points.indexOf(anchor);
+            List<RoutePoint> segment = points.subList(cursor, Math.max(cursor, anchorIndex)).stream()
                     .filter(point -> !used.contains(point))
                     .filter(point -> !anchors.contains(point))
-                    .filter(point -> belongsBetween(point, previousAnchor, anchor))
                     .toList();
             route.addAll(optimizeSegment(segment, previousAnchor, anchor, matrix));
             used.addAll(segment);
@@ -149,6 +150,7 @@ public class RouteOptimizationService {
                 route.add(anchor);
                 used.add(anchor);
             }
+            cursor = Math.max(cursor, anchorIndex + 1);
         }
 
         List<RoutePoint> remaining = points.stream()
@@ -170,25 +172,6 @@ public class RouteOptimizationService {
                 .filter(point -> role.equals(point.routeRole()))
                 .findFirst()
                 .orElse(null);
-    }
-
-    private boolean belongsBetween(RoutePoint point, RoutePoint previousAnchor, RoutePoint nextAnchor) {
-        int pointOrder = point.originalIndex() == null ? Integer.MAX_VALUE : point.originalIndex();
-        int min = previousAnchor == null || previousAnchor.originalIndex() == null || isStartAnchor(previousAnchor)
-                ? Integer.MIN_VALUE
-                : previousAnchor.originalIndex();
-        int max = nextAnchor == null || nextAnchor.originalIndex() == null || isEndAnchor(nextAnchor)
-                ? Integer.MAX_VALUE
-                : nextAnchor.originalIndex();
-        return pointOrder > min && pointOrder < max;
-    }
-
-    private boolean isStartAnchor(RoutePoint point) {
-        return "START".equals(point.routeRole()) || "LODGING".equals(point.routeRole());
-    }
-
-    private boolean isEndAnchor(RoutePoint point) {
-        return "END".equals(point.routeRole()) || "LODGING".equals(point.routeRole());
     }
 
     private List<RoutePoint> optimizeSegment(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {
