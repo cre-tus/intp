@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import TravelCheckList, { ChecklistItem } from "@/components/planner/TravelCheckList";
 import TravelItinerary, { ItineraryDay } from "@/components/planner/TravelItinerary";
 import ParticipantsSidebar, { Participant } from "@/components/planner/ParticipantsSidebar";
@@ -192,9 +193,28 @@ export default function HeroSection({ createId }: { createId?: string }) {
 
     useEffect(() => {
         if (applyingRemoteRef.current) return;
-        const timer = window.setTimeout(() => saveCurrentPlan(true), 300);
+        const timer = window.setTimeout(() => saveCurrentPlan(false), 500);
         return () => window.clearTimeout(timer);
     }, [saveCurrentPlan]);
+
+    const commitRealtimeSync = useCallback(() => {
+        window.setTimeout(() => saveCurrentPlan(true), 0);
+    }, [saveCurrentPlan]);
+
+    const handleCommitKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Enter") return;
+        const target = event.target;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+            commitRealtimeSync();
+        }
+    };
+
+    const handleCommitClick = (event: MouseEvent<HTMLDivElement>) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("button")) {
+            commitRealtimeSync();
+        }
+    };
 
     const inviteUrl = typeof window === "undefined"
         ? ""
@@ -237,7 +257,12 @@ export default function HeroSection({ createId }: { createId?: string }) {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div
+            className="min-h-screen bg-gray-50"
+            onBlurCapture={commitRealtimeSync}
+            onKeyDownCapture={handleCommitKeyDown}
+            onClickCapture={handleCommitClick}
+        >
             <div className="container mx-auto px-4 py-8">
                 <div className="mb-10 flex flex-col gap-2">
                     <h1 className="font-[var(--font-paperlogy)] text-[32px] font-normal leading-[1.05] text-black">
