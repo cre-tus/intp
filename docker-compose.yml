@@ -126,7 +126,7 @@ services:
     environment:
       PBF_PATH: /data/kanto-260209.osm.pbf
       THREADS: 16
-      NOMINATIM_PASSWORD: nominatim
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
     volumes:
       - ./nominatim/pbf:/data
       - ./nominatim/data:/var/lib/postgresql/14/main
