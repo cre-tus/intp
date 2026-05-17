@@ -7,7 +7,7 @@ export default function Home() {
         <RequireAuth>
             <main>
                 <Header/>
-                <HeroSection/>
+                <HeroSection createId="default"/>
             </main>
         </RequireAuth>
     );

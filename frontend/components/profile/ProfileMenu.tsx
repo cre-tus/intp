@@ -3,32 +3,26 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
-import { ProfileIcon } from  "./profile"
+import { ProfileIcon } from "./profile";
 
 export default function ProfileMenu() {
     const router = useRouter();
     const { me, logout } = useAuthStore();
-
     const [open, setOpen] = useState(false);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const btnRef = useRef<HTMLButtonElement | null>(null);
 
-    // 바깥 클릭/ESC로 닫기
     useEffect(() => {
-        const onDown = (e: MouseEvent) => {
+        const onDown = (event: MouseEvent) => {
             if (!open) return;
-            const target = e.target as Node;
-
-            const inPanel = panelRef.current?.contains(target);
-            const inButton = btnRef.current?.contains(target);
-
-            if (!inPanel && !inButton) setOpen(false);
+            const target = event.target as Node;
+            if (!panelRef.current?.contains(target) && !btnRef.current?.contains(target)) {
+                setOpen(false);
+            }
         };
-
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") setOpen(false);
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setOpen(false);
         };
-
         document.addEventListener("mousedown", onDown);
         document.addEventListener("keydown", onKey);
         return () => {
@@ -50,11 +44,10 @@ export default function ProfileMenu() {
 
     return (
         <div style={{ position: "relative" }}>
-            {/* 아이콘 버튼 */}
             <button
                 ref={btnRef}
                 type="button"
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => setOpen((value) => !value)}
                 aria-haspopup="menu"
                 aria-expanded={open}
                 style={{
@@ -71,7 +64,6 @@ export default function ProfileMenu() {
                 <ProfileIcon size={26} />
             </button>
 
-            {/* 아이콘 밑 패널 */}
             {open && (
                 <div
                     ref={panelRef}
@@ -96,33 +88,33 @@ export default function ProfileMenu() {
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                        <div
-                            role="button"
-                            tabIndex={0}
+                        <button
+                            type="button"
                             onClick={() => go("/mypage")}
-                            onKeyDown={(e) => e.key === "Enter" && go("/mypage")}
                             style={{
                                 padding: "12px 14px",
                                 cursor: "pointer",
-                                userSelect: "none",
+                                textAlign: "left",
+                                background: "#fff",
+                                border: 0,
                             }}
                         >
-                            내 정보
-                        </div>
+                            마이페이지
+                        </button>
 
-                        <div
-                            role="button"
-                            tabIndex={0}
-                            onClick={onLogout}
-                            onKeyDown={(e) => e.key === "Enter" && onLogout()}
+                        <button
+                            type="button"
+                            onClick={() => void onLogout()}
                             style={{
                                 padding: "12px 14px",
                                 cursor: "pointer",
-                                userSelect: "none",
+                                textAlign: "left",
+                                background: "#fff",
+                                border: 0,
                             }}
                         >
                             로그아웃
-                        </div>
+                        </button>
                     </div>
                 </div>
             )}
