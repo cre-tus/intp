@@ -63,9 +63,17 @@ const validateActivityTime = (
     return { ok: true };
 };
 
-export default function TravelItinerary() {
-    const [days, setDays] = useState<ItineraryDay[]>([]);
-    const [title, setTitle] = useState("신규 여행 일정표");
+export default function TravelItinerary({
+    days,
+    setDays,
+    title,
+    setTitle,
+}: {
+    days: ItineraryDay[];
+    setDays: React.Dispatch<React.SetStateAction<ItineraryDay[]>>;
+    title: string;
+    setTitle: React.Dispatch<React.SetStateAction<string>>;
+}) {
     const [timeErrors, setTimeErrors] = useState<Record<string, ActivityError>>({});
     const dateInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
     const timeInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
