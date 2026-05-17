@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class RouteOptimizationService {
 
-    private static final int MAX_POINTS = 5;
+    private static final int MAX_POINTS = 10;
     private final GtfsTransitService gtfsTransitService;
 
     public RouteOptimizationService(GtfsTransitService gtfsTransitService) {
@@ -31,9 +31,8 @@ public class RouteOptimizationService {
             return buildResponse(normalized, matrix, started);
         }
 
-        BestRoute best = new BestRoute();
-        permute(normalized, 0, best, matrix);
-        return buildResponse(best.order, matrix, started);
+        List<RoutePoint> optimized = optimizeWithTwoOpt(normalized, matrix);
+        return buildResponse(optimized, matrix, started);
     }
 
     public RouteCompareResponse compare(List<RoutePoint> manualOrder) {
@@ -79,7 +78,7 @@ public class RouteOptimizationService {
             throw new IllegalArgumentException("At least 2 destinations with coordinates are required.");
         }
         if (points.size() > MAX_POINTS) {
-            throw new IllegalArgumentException("Route optimization supports up to 5 destinations.");
+            throw new IllegalArgumentException("Route optimization supports up to 10 destinations.");
         }
 
         List<RoutePoint> normalized = new ArrayList<>();
@@ -99,21 +98,82 @@ public class RouteOptimizationService {
         return normalized;
     }
 
-    private void permute(List<RoutePoint> points, int index, BestRoute best, CostMatrix matrix) {
-        if (index == points.size()) {
-            int minutes = totalMinutes(points, matrix);
-            if (minutes < best.minutes) {
-                best.minutes = minutes;
-                best.order = new ArrayList<>(points);
+    private List<RoutePoint> optimizeWithTwoOpt(List<RoutePoint> points, CostMatrix matrix) {
+        List<RoutePoint> best = new ArrayList<>(points);
+        int bestMinutes = totalMinutes(best, matrix);
+
+        for (int start = 0; start < points.size(); start++) {
+            List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, start);
+            candidate = improveWithTwoOpt(candidate, matrix);
+            int candidateMinutes = totalMinutes(candidate, matrix);
+            if (candidateMinutes < bestMinutes) {
+                best = candidate;
+                bestMinutes = candidateMinutes;
             }
-            return;
         }
 
-        for (int i = index; i < points.size(); i++) {
-            swap(points, index, i);
-            permute(points, index + 1, best, matrix);
-            swap(points, index, i);
+        return best;
+    }
+
+    private List<RoutePoint> nearestNeighborRoute(List<RoutePoint> points, CostMatrix matrix, int startIndex) {
+        List<RoutePoint> route = new ArrayList<>();
+        boolean[] used = new boolean[points.size()];
+        int current = startIndex;
+
+        route.add(points.get(current));
+        used[current] = true;
+
+        while (route.size() < points.size()) {
+            int next = -1;
+            int bestMinutes = Integer.MAX_VALUE;
+            for (int i = 0; i < points.size(); i++) {
+                if (used[i]) continue;
+                int minutes = matrix.minutes[current][i];
+                if (minutes < bestMinutes) {
+                    bestMinutes = minutes;
+                    next = i;
+                }
+            }
+            if (next < 0) break;
+            route.add(points.get(next));
+            used[next] = true;
+            current = next;
         }
+
+        return route;
+    }
+
+    private List<RoutePoint> improveWithTwoOpt(List<RoutePoint> route, CostMatrix matrix) {
+        List<RoutePoint> best = new ArrayList<>(route);
+        int bestMinutes = totalMinutes(best, matrix);
+        boolean improved = true;
+
+        while (improved) {
+            improved = false;
+            for (int left = 0; left < best.size() - 1; left++) {
+                for (int right = left + 1; right < best.size(); right++) {
+                    List<RoutePoint> candidate = twoOptSwap(best, left, right);
+                    int candidateMinutes = totalMinutes(candidate, matrix);
+                    if (candidateMinutes < bestMinutes) {
+                        best = candidate;
+                        bestMinutes = candidateMinutes;
+                        improved = true;
+                    }
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private List<RoutePoint> twoOptSwap(List<RoutePoint> route, int left, int right) {
+        List<RoutePoint> swapped = new ArrayList<>(route.size());
+        swapped.addAll(route.subList(0, left));
+        for (int i = right; i >= left; i--) {
+            swapped.add(route.get(i));
+        }
+        swapped.addAll(route.subList(right + 1, route.size()));
+        return swapped;
     }
 
     private RouteOptimizationResponse buildResponse(List<RoutePoint> order, CostMatrix matrix, long startedNanos) {
@@ -222,19 +282,8 @@ public class RouteOptimizationService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    private void swap(List<RoutePoint> points, int left, int right) {
-        RoutePoint temp = points.get(left);
-        points.set(left, points.get(right));
-        points.set(right, temp);
-    }
-
     private double roundKm(double value) {
         return Math.round(value * 100.0) / 100.0;
-    }
-
-    private static class BestRoute {
-        private List<RoutePoint> order = List.of();
-        private int minutes = Integer.MAX_VALUE;
     }
 
     private record CostMatrix(

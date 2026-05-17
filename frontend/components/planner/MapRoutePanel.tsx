@@ -321,8 +321,8 @@ export default function MapRoutePanel({ days }: { days: ItineraryDay[] }) {
     const disabledReason =
         selectedPoints.length < 2
             ? "선택한 Day에 좌표가 있는 장소가 2개 이상이어야 경로를 계산할 수 있습니다."
-            : selectedPoints.length > 5
-                ? "TSP 최적화는 한 Day 안의 목적지 5개까지 지원합니다."
+            : selectedPoints.length > 10
+                ? "TSP 최적화는 한 Day 안의 목적지 10개까지 지원합니다."
                 : "";
 
     return (
