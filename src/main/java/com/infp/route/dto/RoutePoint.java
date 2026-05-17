@@ -5,6 +5,7 @@ public record RoutePoint(
         String name,
         double lat,
         double lon,
-        Integer originalIndex
+        Integer originalIndex,
+        String routeRole
 ) {
 }

@@ -31,8 +31,23 @@ export default function PlaceSearchInput(props: {
 }) {
     const [q, setQ] = useState(props.initialQuery ?? "");
     const [items, setItems] = useState<PlaceResult[]>([]);
+    const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+    const [manualName, setManualName] = useState(props.initialQuery ?? "");
+    const [manualLat, setManualLat] = useState("");
+    const [manualLon, setManualLon] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+
+    const parsedLat = Number(manualLat);
+    const parsedLon = Number(manualLon);
+    const canAdd =
+        manualName.trim().length > 0 &&
+        Number.isFinite(parsedLat) &&
+        Number.isFinite(parsedLon) &&
+        parsedLat >= -90 &&
+        parsedLat <= 90 &&
+        parsedLon >= -180 &&
+        parsedLon <= 180;
 
     useEffect(() => {
         if (!q.trim()) {
@@ -83,6 +98,49 @@ export default function PlaceSearchInput(props: {
                 />
             </div>
 
+            <div className="mt-3 grid gap-2 rounded-lg border border-gray-200 bg-white p-3">
+                <input
+                    value={manualName}
+                    onChange={(event) => setManualName(event.target.value)}
+                    placeholder="표시할 장소 이름"
+                    className="rounded-md border border-gray-200 px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                    <input
+                        value={manualLat}
+                        onChange={(event) => setManualLat(event.target.value)}
+                        placeholder="위도"
+                        inputMode="decimal"
+                        className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                    />
+                    <input
+                        value={manualLon}
+                        onChange={(event) => setManualLon(event.target.value)}
+                        placeholder="경도"
+                        inputMode="decimal"
+                        className="rounded-md border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                    />
+                </div>
+                <button
+                    type="button"
+                    disabled={!canAdd}
+                    onClick={() => {
+                        if (!canAdd) return;
+                        props.onSelect({
+                            id: selectedPlace?.id ?? `manual:${parsedLat.toFixed(6)},${parsedLon.toFixed(6)}`,
+                            title: manualName.trim(),
+                            displayTitle: manualName.trim(),
+                            subtitle: selectedPlace?.subtitle ?? `${parsedLat.toFixed(6)}, ${parsedLon.toFixed(6)}`,
+                            lat: parsedLat,
+                            lon: parsedLon,
+                        });
+                    }}
+                    className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                    추가하기
+                </button>
+            </div>
+
             <div className="mt-3 max-h-[320px] overflow-auto rounded-lg border border-gray-200">
                 {loading ? (
                     <div className="p-4 text-sm text-gray-500">검색 중...</div>
@@ -97,7 +155,12 @@ export default function PlaceSearchInput(props: {
                                 <button
                                     type="button"
                                     className="w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-gray-50"
-                                    onClick={() => props.onSelect(item)}
+                                    onClick={() => {
+                                        setSelectedPlace(item);
+                                        setManualName(item.title);
+                                        setManualLat(String(item.lat));
+                                        setManualLon(String(item.lon));
+                                    }}
                                 >
                                     <div className="font-medium">{item.displayTitle ?? item.title}</div>
                                     <div className="mt-0.5 text-xs text-gray-500">{item.subtitle}</div>

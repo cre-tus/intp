@@ -32,6 +32,7 @@ type RoutePoint = {
     lat: number;
     lon: number;
     originalIndex: number;
+    routeRole?: "NONE" | "LODGING" | "START" | "END" | "FIXED";
 };
 
 type TransitStop = {
@@ -139,6 +140,7 @@ export default function MapRoutePanel({ days }: { days: ItineraryDay[] }) {
                     lat: activity.lat as number,
                     lon: activity.lon as number,
                     originalIndex: index++,
+                    routeRole: activity.routeRole ?? "NONE",
                 }))
         );
     }, [days]);

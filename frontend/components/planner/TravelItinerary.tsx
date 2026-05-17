@@ -16,6 +16,7 @@ export interface ItineraryActivity {
     placeSubtitle?: string;
     lat?: number;
     lon?: number;
+    routeRole?: "NONE" | "LODGING" | "START" | "END" | "FIXED";
 }
 
 export interface ItineraryDay {

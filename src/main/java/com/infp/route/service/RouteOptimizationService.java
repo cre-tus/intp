@@ -10,7 +10,11 @@ import com.infp.route.gtfs.GtfsTransitService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @Service
 public class RouteOptimizationService {
@@ -31,7 +35,7 @@ public class RouteOptimizationService {
             return buildResponse(normalized, matrix, started);
         }
 
-        List<RoutePoint> optimized = optimizeWithTwoOpt(normalized, matrix);
+        List<RoutePoint> optimized = optimizeWithConstraints(normalized, matrix);
         return buildResponse(optimized, matrix, started);
     }
 
@@ -92,10 +96,128 @@ public class RouteOptimizationService {
                     blankToFallback(point.name(), "Destination " + (i + 1)),
                     point.lat(),
                     point.lon(),
-                    point.originalIndex() == null ? i : point.originalIndex()
+                    point.originalIndex() == null ? i : point.originalIndex(),
+                    normalizeRole(point.routeRole())
             ));
         }
         return normalized;
+    }
+
+    private String normalizeRole(String value) {
+        if (value == null || value.isBlank()) return "NONE";
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private List<RoutePoint> optimizeWithConstraints(List<RoutePoint> points, CostMatrix matrix) {
+        RoutePoint lodging = firstByRole(points, "LODGING");
+        RoutePoint start = lodging != null ? lodging : firstByRole(points, "START");
+        RoutePoint end = lodging != null ? lodging : firstByRole(points, "END");
+        List<RoutePoint> fixed = points.stream()
+                .filter(point -> "FIXED".equals(point.routeRole()))
+                .sorted(Comparator.comparingInt(point -> point.originalIndex() == null ? Integer.MAX_VALUE : point.originalIndex()))
+                .toList();
+
+        if (start == null && end == null && fixed.isEmpty()) {
+            return optimizeWithTwoOpt(points, matrix);
+        }
+
+        List<RoutePoint> anchors = new ArrayList<>();
+        if (start != null) anchors.add(start);
+        for (RoutePoint point : fixed) {
+            if (!anchors.contains(point)) anchors.add(point);
+        }
+        if (end != null && !anchors.contains(end)) anchors.add(end);
+
+        List<RoutePoint> route = new ArrayList<>();
+        Set<RoutePoint> used = new HashSet<>();
+        if (start != null) {
+            route.add(start);
+            used.add(start);
+        }
+
+        for (RoutePoint anchor : anchors) {
+            if (used.contains(anchor) && anchor != end) continue;
+            RoutePoint previousAnchor = route.isEmpty() ? null : route.get(route.size() - 1);
+            List<RoutePoint> segment = points.stream()
+                    .filter(point -> !used.contains(point))
+                    .filter(point -> !anchors.contains(point))
+                    .filter(point -> belongsBetween(point, previousAnchor, anchor))
+                    .toList();
+            route.addAll(optimizeSegment(segment, previousAnchor, anchor, matrix));
+            used.addAll(segment);
+            if (!used.contains(anchor)) {
+                route.add(anchor);
+                used.add(anchor);
+            }
+        }
+
+        List<RoutePoint> remaining = points.stream()
+                .filter(point -> !used.contains(point))
+                .filter(point -> !anchors.contains(point))
+                .toList();
+        route.addAll(optimizeSegment(remaining, route.isEmpty() ? null : route.get(route.size() - 1), end, matrix));
+        used.addAll(remaining);
+
+        if (end != null && (route.isEmpty() || !route.get(route.size() - 1).equals(end))) {
+            route.add(end);
+        }
+
+        return route;
+    }
+
+    private RoutePoint firstByRole(List<RoutePoint> points, String role) {
+        return points.stream()
+                .filter(point -> role.equals(point.routeRole()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean belongsBetween(RoutePoint point, RoutePoint previousAnchor, RoutePoint nextAnchor) {
+        int pointOrder = point.originalIndex() == null ? Integer.MAX_VALUE : point.originalIndex();
+        int min = previousAnchor == null || previousAnchor.originalIndex() == null || isStartAnchor(previousAnchor)
+                ? Integer.MIN_VALUE
+                : previousAnchor.originalIndex();
+        int max = nextAnchor == null || nextAnchor.originalIndex() == null || isEndAnchor(nextAnchor)
+                ? Integer.MAX_VALUE
+                : nextAnchor.originalIndex();
+        return pointOrder > min && pointOrder < max;
+    }
+
+    private boolean isStartAnchor(RoutePoint point) {
+        return "START".equals(point.routeRole()) || "LODGING".equals(point.routeRole());
+    }
+
+    private boolean isEndAnchor(RoutePoint point) {
+        return "END".equals(point.routeRole()) || "LODGING".equals(point.routeRole());
+    }
+
+    private List<RoutePoint> optimizeSegment(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        if (points.size() <= 1) return List.copyOf(points);
+
+        List<RoutePoint> best = List.copyOf(points);
+        int bestMinutes = totalMinutesWithBounds(best, start, end, matrix);
+
+        if (start != null) {
+            List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, start);
+            candidate = improveSegmentWithTwoOpt(candidate, start, end, matrix);
+            int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
+            if (candidateMinutes < bestMinutes) {
+                best = candidate;
+                bestMinutes = candidateMinutes;
+            }
+        }
+
+        for (int i = 0; i < points.size(); i++) {
+            List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, i);
+            candidate = improveSegmentWithTwoOpt(candidate, start, end, matrix);
+            int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
+            if (candidateMinutes < bestMinutes) {
+                best = candidate;
+                bestMinutes = candidateMinutes;
+            }
+        }
+
+        return best;
     }
 
     private List<RoutePoint> optimizeWithTwoOpt(List<RoutePoint> points, CostMatrix matrix) {
@@ -143,6 +265,29 @@ public class RouteOptimizationService {
         return route;
     }
 
+    private List<RoutePoint> nearestNeighborRoute(List<RoutePoint> points, CostMatrix matrix, RoutePoint startPoint) {
+        List<RoutePoint> route = new ArrayList<>();
+        Set<RoutePoint> unused = new HashSet<>(points);
+        RoutePoint current = startPoint;
+
+        while (!unused.isEmpty()) {
+            RoutePoint next = null;
+            int bestMinutes = Integer.MAX_VALUE;
+            for (RoutePoint candidate : unused) {
+                int minutes = matrix.minutes[matrix.indexOf(current)][matrix.indexOf(candidate)];
+                if (minutes < bestMinutes) {
+                    bestMinutes = minutes;
+                    next = candidate;
+                }
+            }
+            route.add(next);
+            unused.remove(next);
+            current = next;
+        }
+
+        return route;
+    }
+
     private List<RoutePoint> improveWithTwoOpt(List<RoutePoint> route, CostMatrix matrix) {
         List<RoutePoint> best = new ArrayList<>(route);
         int bestMinutes = totalMinutes(best, matrix);
@@ -154,6 +299,29 @@ public class RouteOptimizationService {
                 for (int right = left + 1; right < best.size(); right++) {
                     List<RoutePoint> candidate = twoOptSwap(best, left, right);
                     int candidateMinutes = totalMinutes(candidate, matrix);
+                    if (candidateMinutes < bestMinutes) {
+                        best = candidate;
+                        bestMinutes = candidateMinutes;
+                        improved = true;
+                    }
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private List<RoutePoint> improveSegmentWithTwoOpt(List<RoutePoint> route, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        List<RoutePoint> best = new ArrayList<>(route);
+        int bestMinutes = totalMinutesWithBounds(best, start, end, matrix);
+        boolean improved = true;
+
+        while (improved) {
+            improved = false;
+            for (int left = 0; left < best.size() - 1; left++) {
+                for (int right = left + 1; right < best.size(); right++) {
+                    List<RoutePoint> candidate = twoOptSwap(best, left, right);
+                    int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
                     if (candidateMinutes < bestMinutes) {
                         best = candidate;
                         bestMinutes = candidateMinutes;
@@ -239,6 +407,20 @@ public class RouteOptimizationService {
         int total = 0;
         for (int i = 0; i < order.size() - 1; i++) {
             total += matrix.minutes[matrix.indexOf(order.get(i))][matrix.indexOf(order.get(i + 1))];
+        }
+        return total;
+    }
+
+    private int totalMinutesWithBounds(List<RoutePoint> order, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        int total = totalMinutes(order, matrix);
+        if (start != null && !order.isEmpty()) {
+            total += matrix.minutes[matrix.indexOf(start)][matrix.indexOf(order.get(0))];
+        }
+        if (end != null && !order.isEmpty()) {
+            total += matrix.minutes[matrix.indexOf(order.get(order.size() - 1))][matrix.indexOf(end)];
+        }
+        if (start != null && end != null && order.isEmpty()) {
+            total += matrix.minutes[matrix.indexOf(start)][matrix.indexOf(end)];
         }
         return total;
     }
