@@ -1,7 +1,9 @@
 package com.infp.auth.controller;
 
+import com.infp.auth.dto.EmailCheckResponse;
 import com.infp.auth.dto.LoginRequest;
 import com.infp.auth.dto.MeResponse;
+import com.infp.auth.dto.RegisterRequest;
 import com.infp.auth.jwt.JwtAuthFilter;
 import com.infp.auth.service.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -65,6 +67,21 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/check-email")
+    public ResponseEntity<EmailCheckResponse> checkEmail(@RequestParam String email) {
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase();
+        return ResponseEntity.ok(new EmailCheckResponse(
+                normalizedEmail,
+                authService.isEmailAvailable(normalizedEmail)
+        ));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<Void> register(@RequestBody RegisterRequest req) {
+        authService.register(req);
+        return ResponseEntity.ok().build();
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @CookieValue(name = "refreshToken", required = false) String refreshToken,
@@ -97,7 +114,8 @@ public class AuthController {
                 new MeResponse(
                         principal.userId(),
                         principal.email(),
-                        principal.nickname()
+                        principal.nickname(),
+                        principal.role()
                 )
         );
     }

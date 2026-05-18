@@ -4,13 +4,16 @@ import com.infp.place.client.NominatimClient;
 import com.infp.place.dto.PlaceItem;
 import com.infp.place.util.Geo;
 import com.infp.place.util.QueryVariantBuilder;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.*;
 
 @Service
@@ -18,7 +21,10 @@ public class PlaceAutocompleteService {
 
     // 좌표 정규화 로그 테스트
     private static final Logger log = LoggerFactory.getLogger(PlaceAutocompleteService.class);
+    private static final Duration CACHE_TTL = Duration.ofHours(6);
+    private static final TypeReference<List<PlaceItem>> PLACE_LIST_TYPE = new TypeReference<>() {};
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * Nominatim 외부 호출 전담 클라이언트
@@ -26,8 +32,12 @@ public class PlaceAutocompleteService {
      */
     private final NominatimClient nominatimClient;
 
-    public PlaceAutocompleteService(NominatimClient nominatimClient) {
+    public PlaceAutocompleteService(
+            NominatimClient nominatimClient,
+            StringRedisTemplate redisTemplate
+    ) {
         this.nominatimClient = nominatimClient;
+        this.redisTemplate = redisTemplate;
     }
 
     /**
@@ -52,6 +62,11 @@ public class PlaceAutocompleteService {
         // 🔹 입력이 비어있으면 바로 빈 리스트 반환
         if (s.isEmpty()) {
             return Mono.just(List.of());
+        }
+
+        List<PlaceItem> cached = readCache(s);
+        if (cached != null) {
+            return Mono.just(cached);
         }
 
         // 🔹 2) 후보 생성 (최대 5개)
@@ -119,7 +134,29 @@ public class PlaceAutocompleteService {
                     return out.size() > 15
                             ? out.subList(0, 15)
                             : out;
-                });
+                })
+                .doOnNext(result -> writeCache(s, result));
+    }
+
+    private List<PlaceItem> readCache(String query) {
+        try {
+            String cached = redisTemplate.opsForValue().get(cacheKey(query));
+            return cached == null ? null : objectMapper.readValue(cached, PLACE_LIST_TYPE);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void writeCache(String query, List<PlaceItem> result) {
+        try {
+            redisTemplate.opsForValue().set(cacheKey(query), objectMapper.writeValueAsString(result), CACHE_TTL);
+        } catch (Exception ignored) {
+            // Autocomplete should remain available even when Redis is unavailable.
+        }
+    }
+
+    private String cacheKey(String query) {
+        return "place:autocomplete:v1:" + Integer.toHexString(query.toLowerCase(Locale.ROOT).hashCode());
     }
 
     /**

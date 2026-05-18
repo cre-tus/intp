@@ -1,0 +1,13 @@
+.git
+.gradle
+.idea
+build
+node_modules
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/build
+nominatim
+tiles
+*.log
+*.tmp

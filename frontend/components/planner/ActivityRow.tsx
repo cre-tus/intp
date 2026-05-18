@@ -33,7 +33,7 @@ export default function ActivityRow(props: {
     const [placeOpen, setPlaceOpen] = useState(false);
 
     return (
-        <div className="group flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md">
+        <div className="group grid gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md sm:grid-cols-[auto_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_auto] sm:items-center">
             <div
                 ref={(el) => props.dragHandleProps?.setActivatorNodeRef?.(el)}
                 {...(props.dragHandleProps?.attributes ?? {})}

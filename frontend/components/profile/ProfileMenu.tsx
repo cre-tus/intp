@@ -102,6 +102,22 @@ export default function ProfileMenu() {
                             마이페이지
                         </button>
 
+                        {me?.role === "ADMIN" && (
+                            <button
+                                type="button"
+                                onClick={() => go("/admin/server-test")}
+                                style={{
+                                    padding: "12px 14px",
+                                    cursor: "pointer",
+                                    textAlign: "left",
+                                    background: "#fff",
+                                    border: 0,
+                                }}
+                            >
+                                서버 테스트
+                            </button>
+                        )}
+
                         <button
                             type="button"
                             onClick={() => void onLogout()}

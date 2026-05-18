@@ -5,7 +5,7 @@ import type { Participant } from "@/components/planner/ParticipantsSidebar";
 export type TravelPlanDraft = {
     id: string;
     title: string;
-    template: "basic";
+    template: "basic" | "spreadsheet";
     checklist: ChecklistItem[];
     days: ItineraryDay[];
     participants: Participant[];
@@ -16,18 +16,61 @@ export type TravelPlanDraft = {
 const INDEX_KEY = "infp.travelPlans.index";
 const planKey = (id: string) => `infp.travelPlans.${id}`;
 
-export function createEmptyTravelPlan(id: string, title = "신규 여행 일정표"): TravelPlanDraft {
+export function createEmptyTravelPlan(
+    id: string,
+    title = "신규 여행 일정표",
+    template: TravelPlanDraft["template"] = "basic"
+): TravelPlanDraft {
     const now = new Date().toISOString();
     return {
         id,
         title,
-        template: "basic",
+        template,
         checklist: [],
         days: [],
         participants: [],
         createdAt: now,
         updatedAt: now,
     };
+}
+
+export function createSpreadsheetTravelPlan(id: string, title = "엑셀형 여행 일정표"): TravelPlanDraft {
+    const plan = createEmptyTravelPlan(id, title, "spreadsheet");
+    const lodgingRow = "__lodging__";
+    const timeRows = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+    const costRows = ["아침", "점심", "저녁", "교통", "기타"];
+    plan.days = Array.from({ length: 5 }, (_, dayIndex) => ({
+        id: crypto.randomUUID(),
+        date: "",
+        dayTitle: `Day ${dayIndex + 1}`,
+        activities: [
+            {
+                id: crypto.randomUUID(),
+                time: lodgingRow,
+                location: "",
+                activity: "",
+                cost: 0,
+                routeRole: "LODGING" as const,
+            },
+            ...timeRows.map((time) => ({
+                id: crypto.randomUUID(),
+                time,
+                location: "",
+                activity: "",
+                cost: 0,
+                routeRole: "NONE" as const,
+            })),
+            ...costRows.map((label) => ({
+            id: crypto.randomUUID(),
+                time: `__cost__:${label}`,
+            location: "",
+                activity: "",
+            cost: 0,
+                routeRole: "NONE" as const,
+            })),
+        ],
+    }));
+    return plan;
 }
 
 export function loadTravelPlan(id: string): TravelPlanDraft | null {
@@ -49,18 +92,37 @@ export function saveTravelPlan(plan: TravelPlanDraft) {
     index.unshift({
         id: updated.id,
         title: updated.title,
+        template: updated.template,
+        participantCount: updated.participants.length,
         updatedAt: updated.updatedAt,
         createdAt: updated.createdAt,
     });
     window.localStorage.setItem(INDEX_KEY, JSON.stringify(index));
 }
 
-export function loadTravelPlanIndex(): Array<Pick<TravelPlanDraft, "id" | "title" | "createdAt" | "updatedAt">> {
+export function deleteTravelPlan(id: string) {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(planKey(id));
+    const index = loadTravelPlanIndex().filter((item) => item.id !== id);
+    window.localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+}
+
+export function loadTravelPlanIndex(): Array<Pick<TravelPlanDraft, "id" | "title" | "template" | "createdAt" | "updatedAt"> & { participantCount: number }> {
     if (typeof window === "undefined") return [];
     const raw = window.localStorage.getItem(INDEX_KEY);
     if (!raw) return [];
     try {
-        return JSON.parse(raw);
+        return (JSON.parse(raw) as Array<Partial<TravelPlanDraft> & { id: string; participantCount?: number }>).map((item) => {
+            const fullPlan = loadTravelPlan(item.id);
+            return {
+                id: item.id,
+                title: item.title ?? fullPlan?.title ?? "여행 계획",
+                template: item.template ?? fullPlan?.template ?? "basic",
+                participantCount: item.participantCount ?? fullPlan?.participants.length ?? 0,
+                createdAt: item.createdAt ?? fullPlan?.createdAt ?? new Date().toISOString(),
+                updatedAt: item.updatedAt ?? fullPlan?.updatedAt ?? new Date().toISOString(),
+            };
+        });
     } catch {
         return [];
     }
