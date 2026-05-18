@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createEmptyTravelPlan, generatePlanId, saveTravelPlan } from "@/lib/travelPlans";
+import { createEmptyTravelPlan, createSpreadsheetTravelPlan, generatePlanId, saveTravelPlan, type TravelPlanDraft } from "@/lib/travelPlans";
 import { useAuthStore } from "@/stores/authStore";
 
 export default function PrimaryButton() {
@@ -10,10 +10,13 @@ export default function PrimaryButton() {
     const { me } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [title, setTitle] = useState("신규 여행 일정표");
+    const [template, setTemplate] = useState<TravelPlanDraft["template"]>("basic");
 
     const createPlan = () => {
         const id = generatePlanId();
-        const plan = createEmptyTravelPlan(id, title.trim() || "신규 여행 일정표");
+        const plan = template === "spreadsheet"
+            ? createSpreadsheetTravelPlan(id, title.trim() || "엑셀형 여행 일정표")
+            : createEmptyTravelPlan(id, title.trim() || "신규 여행 일정표", "basic");
         if (me?.email) {
             plan.participants = [{
                 id: me.id,
@@ -47,7 +50,7 @@ export default function PrimaryButton() {
                     <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
                         <div className="text-xl font-bold text-gray-950">템플릿 선택</div>
                         <p className="mt-1 text-sm text-gray-500">
-                            우선 기본 템플릿으로 여행 계획을 생성합니다.
+                            여행 계획 작성 방식을 선택해주세요.
                         </p>
 
                         <label className="mt-5 block text-sm font-semibold text-gray-700">
@@ -61,11 +64,27 @@ export default function PrimaryButton() {
 
                         <button
                             type="button"
-                            className="mt-5 w-full rounded-lg border-2 border-gray-950 bg-gray-50 p-4 text-left"
+                            onClick={() => setTemplate("basic")}
+                            className={`mt-5 w-full rounded-lg border-2 p-4 text-left ${
+                                template === "basic" ? "border-gray-950 bg-gray-50" : "border-gray-200 bg-white"
+                            }`}
                         >
                             <div className="font-bold text-gray-950">기본 템플릿</div>
                             <div className="mt-1 text-sm text-gray-500">
                                 체크리스트, Day별 일정, 지도/TSP 경로 패널을 포함합니다.
+                            </div>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setTemplate("spreadsheet")}
+                            className={`mt-3 w-full rounded-lg border-2 p-4 text-left ${
+                                template === "spreadsheet" ? "border-gray-950 bg-gray-50" : "border-gray-200 bg-white"
+                            }`}
+                        >
+                            <div className="font-bold text-gray-950">엑셀형 템플릿</div>
+                            <div className="mt-1 text-sm text-gray-500">
+                                7일 여행표를 날짜별 열과 일정/식비 행으로 작성합니다.
                             </div>
                         </button>
 

@@ -52,6 +52,10 @@ public class User {
     //Enum('ACTIVE', 'SUSPENDED', 'DELETED')
     private UserStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role = UserRole.USER;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     // 생성 시각, 이후 수정 불가
     private LocalDateTime createdAt;
@@ -73,6 +77,9 @@ public class User {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         this.status = UserStatus.ACTIVE;
+        if (this.role == null) {
+            this.role = UserRole.USER;
+        }
     }
 
     @PreUpdate //insert, update 시 자동갱신

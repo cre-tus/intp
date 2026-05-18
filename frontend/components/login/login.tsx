@@ -46,40 +46,40 @@ export default function Login() {
 
     return (
         <div className="min-h-screen">
-            <main className="flex items-center justify-center min-h-[calc(100vh-84px)]">
+            <main className="flex min-h-[calc(100vh-84px)] items-center justify-center px-4 py-8 sm:px-6">
                 {/* 중앙 묶음 */}
-                <div className="flex flex-col items-center">
+                <div className="flex w-full flex-col items-center">
                     {/* 로그인 프레임 */}
-                    <div className="w-[500px] p-12 py-16 border border-gray-200 rounded-xl">
-                        <h1 className="mb-8 text-center font-[var(--font-paperlogy)] font-semibold text-3xl">
+                    <div className="w-full max-w-[640px] rounded-2xl border border-gray-200 bg-white p-7 py-10 shadow-sm sm:p-12 lg:p-14">
+                        <h1 className="mb-10 text-center font-[var(--font-paperlogy)] text-3xl font-semibold sm:text-4xl">
                             인팁 : Trip Planner
                         </h1>
 
                         {/* ✅ 로그인 폼 */}
-                        <form className="flex flex-col gap-5" onSubmit={handleLogin}>
+                        <form className="flex flex-col gap-6" onSubmit={handleLogin}>
                             {/* 이메일 입력 */}
                             <div className="flex flex-col gap-2">
-                                <label htmlFor="email">이메일</label>
+                                <label htmlFor="email" className="text-base font-semibold">이메일</label>
                                 <input
                                     id="email"
                                     type="email"
                                     placeholder="이메일을 입력하세요"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="px-4 py-3 border border-gray-200 rounded-lg text-base"
+                                    className="rounded-xl border border-gray-200 px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10"
                                 />
                             </div>
 
                             {/* 비밀번호 입력 */}
                             <div className="flex flex-col gap-2">
-                                <label htmlFor="password">비밀번호</label>
+                                <label htmlFor="password" className="text-base font-semibold">비밀번호</label>
                                 <input
                                     id="password"
                                     type="password"
                                     placeholder="비밀번호를 입력하세요"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="px-4 py-3 border border-gray-200 rounded-lg text-base"
+                                    className="rounded-xl border border-gray-200 px-5 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-gray-900/10"
                                 />
                             </div>
 
@@ -96,7 +96,7 @@ export default function Login() {
                     </div>
 
                     {/* 하단 nav */}
-                    <nav className="mt-8 flex items-center gap-6 text-sm text-gray-600">
+                    <nav className="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-gray-600 sm:gap-6">
                         <Link href="/find-id" className="hover:text-black transition-colors">
                             아이디 찾기
                         </Link>

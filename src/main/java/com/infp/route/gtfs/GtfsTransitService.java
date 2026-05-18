@@ -12,12 +12,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class GtfsTransitService {
@@ -66,6 +68,16 @@ public class GtfsTransitService {
                 .map(stop -> stop.toTransitStop(distanceMeters(point.lat(), point.lon(), stop.lat(), stop.lon()), routeNamesByStopId))
                 .min(Comparator.comparingInt(TransitStop::distanceMeters))
                 .orElseThrow(() -> new IllegalStateException("GTFS 정류장 데이터가 비어 있습니다."));
+    }
+
+    public List<TransitStop> randomStops(int limit) {
+        int safeLimit = Math.max(2, Math.min(limit, Math.min(20, stops.size())));
+        List<StopRow> shuffled = new ArrayList<>(stops);
+        Collections.shuffle(shuffled, ThreadLocalRandom.current());
+        return shuffled.stream()
+                .limit(safeLimit)
+                .map(stop -> stop.toTransitStop(0, routeNamesByStopId))
+                .toList();
     }
 
     public CostEstimate estimateCost(RoutePoint from, RoutePoint to) {

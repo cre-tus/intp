@@ -29,6 +29,7 @@ CREATE TABLE users (
 
                        birth DATE NULL COMMENT '생년월일',
                        status ENUM('ACTIVE','SUSPENDED','DELETED') NOT NULL DEFAULT 'ACTIVE' COMMENT '계정 상태',
+                       role ENUM('USER','ADMIN') NOT NULL DEFAULT 'USER' COMMENT '시스템 권한',
 
                        created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '생성시간',
                        updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)

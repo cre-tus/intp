@@ -1,8 +1,10 @@
 package com.infp.auth.service;
 
 import com.infp.auth.dto.LoginRequest;
+import com.infp.auth.dto.RegisterRequest;
 import com.infp.auth.jwt.JwtTokenProvider;
 import com.infp.user.entity.User;
+import com.infp.user.entity.UserRole;
 import com.infp.user.entity.UserStatus;
 import com.infp.user.repository.UserRepository;
 import io.jsonwebtoken.Claims;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.Locale;
 
 @Service
 public class AuthService {
@@ -56,6 +59,47 @@ public class AuthService {
         userRepository.save(user);
 
         return new TokenPair(accessToken, refreshToken);
+    }
+
+    public boolean isEmailAvailable(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (normalizedEmail.isBlank()) {
+            throw new IllegalArgumentException("이메일을 입력해주세요.");
+        }
+        return !userRepository.existsByEmail(normalizedEmail);
+    }
+
+    public void register(RegisterRequest req) {
+        String email = normalizeEmail(req.email());
+        if (email.isBlank()) {
+            throw new IllegalArgumentException("이메일을 입력해주세요.");
+        }
+        if (req.password() == null || req.password().length() < 4) {
+            throw new IllegalArgumentException("비밀번호는 4자 이상이어야 합니다.");
+        }
+        if (isBlank(req.firstName()) || isBlank(req.lastName())) {
+            throw new IllegalArgumentException("성명 입력은 필수입니다.");
+        }
+        if (isBlank(req.nickname())) {
+            throw new IllegalArgumentException("닉네임을 입력해주세요.");
+        }
+        if (req.birth() == null) {
+            throw new IllegalArgumentException("생년월일을 입력해주세요.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+        }
+
+        User user = new User();
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(req.password()));
+        user.setFirstName(req.firstName().trim());
+        user.setLastName(req.lastName().trim());
+        user.setNickname(req.nickname().trim());
+        user.setBirth(req.birth());
+        user.setStatus(UserStatus.ACTIVE);
+        user.setRole(UserRole.USER);
+        userRepository.save(user);
     }
 
     //  refreshToken으로 access 재발급 + refresh 회전(rotate)
@@ -133,5 +177,13 @@ public class AuthService {
         } catch (Exception e) {
             throw new IllegalStateException("SHA-256 not available", e);
         }
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

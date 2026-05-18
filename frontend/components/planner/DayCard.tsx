@@ -52,7 +52,7 @@ export default function DayCard(props: {
 
     return (
         <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white shadow-md transition-all duration-300 hover:border-gray-300 hover:shadow-xl">
-            <div className="group relative flex items-center gap-3 overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 px-5 py-4">
+            <div className="group relative flex flex-wrap items-center gap-3 overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 px-4 py-4 sm:px-5">
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
                 <button
@@ -70,10 +70,10 @@ export default function DayCard(props: {
                     type="text"
                     value={day.dayTitle}
                     onChange={(event) => props.onUpdateDayTitle(day.id, event.target.value)}
-                    className="z-10 w-32 flex-shrink-0 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+                    className="z-10 min-w-0 flex-1 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 sm:w-32 sm:flex-shrink-0 sm:flex-none"
                 />
 
-                <div className="z-10 flex flex-1 items-center gap-2">
+                <div className="z-10 flex min-w-[180px] flex-1 items-center gap-2">
                     <button
                         onClick={() => props.onFocusDate(day.id)}
                         className="flex-shrink-0 rounded-lg p-2 transition-all hover:scale-110 hover:bg-white/20"
@@ -100,7 +100,7 @@ export default function DayCard(props: {
                 </button>
             </div>
 
-            <div className="space-y-3 bg-gradient-to-b from-white to-gray-50 p-5">
+            <div className="space-y-3 bg-gradient-to-b from-white to-gray-50 p-3 sm:p-5">
                 <DndContext collisionDetection={closestCenter} onDragEnd={handleActivityDragEnd}>
                     <SortableContext items={day.activities.map((activity) => activity.id)} strategy={verticalListSortingStrategy}>
                         {day.activities.map((activity, idx) => (

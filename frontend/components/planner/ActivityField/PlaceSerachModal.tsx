@@ -6,6 +6,9 @@ export default function PlaceSearchModal(props: {
     onClose: () => void;
     onSelect: (place: PlaceResult) => void;
     initialQuery?: string;
+    showFixedOption?: boolean;
+    fixedOptionChecked?: boolean;
+    onFixedOptionChange?: (checked: boolean) => void;
 }) {
     if (!props.open) return null;
 
@@ -16,7 +19,7 @@ export default function PlaceSearchModal(props: {
                 onClick={props.onClose}
             />
 
-            <div className="relative w-[520px] max-w-[92vw] rounded-xl bg-white shadow-xl border border-gray-200 p-4">
+            <div className="relative w-[1040px] max-w-[94vw] rounded-xl bg-white shadow-xl border border-gray-200 p-4">
                 <div className="flex items-center justify-between mb-3">
                     <div className="font-semibold">장소 검색</div>
                     <button onClick={props.onClose} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -26,6 +29,9 @@ export default function PlaceSearchModal(props: {
 
                 <PlaceSearchInput
                     initialQuery={props.initialQuery}
+                    showFixedOption={props.showFixedOption}
+                    fixedOptionChecked={props.fixedOptionChecked}
+                    onFixedOptionChange={props.onFixedOptionChange}
                     onSelect={(place) => {
                         props.onSelect(place);
                         props.onClose();

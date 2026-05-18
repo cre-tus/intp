@@ -73,7 +73,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
 
             // 5) Spring Security에 인증 등록
-            var principal = new AuthPrincipal(user.getId(), user.getEmail(), user.getNickname());
+            var principal = new AuthPrincipal(user.getId(), user.getEmail(), user.getNickname(), user.getRole().name());
 
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(principal, null, List.of());
@@ -100,5 +100,5 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
         return null;
     }
-    public record AuthPrincipal(Long userId, String email, String nickname) {}
+    public record AuthPrincipal(Long userId, String email, String nickname, String role) {}
 }

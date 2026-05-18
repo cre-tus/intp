@@ -1,5 +1,8 @@
 package com.infp.route.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.infp.route.dto.RouteBenchmarkResponse;
 import com.infp.route.dto.RouteCompareResponse;
 import com.infp.route.dto.RouteCostMatrixResponse;
 import com.infp.route.dto.RouteLeg;
@@ -7,23 +10,34 @@ import com.infp.route.dto.RouteOptimizationResponse;
 import com.infp.route.dto.RoutePoint;
 import com.infp.route.dto.TransitStop;
 import com.infp.route.gtfs.GtfsTransitService;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class RouteOptimizationService {
 
-    private static final int MAX_POINTS = 10;
+    private static final int MAX_POINTS = 20;
+    private static final long MAX_CALCULATION_MILLIS = 10_000;
+    private static final Duration CACHE_TTL = Duration.ofMinutes(30);
     private final GtfsTransitService gtfsTransitService;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public RouteOptimizationService(GtfsTransitService gtfsTransitService) {
+    public RouteOptimizationService(
+            GtfsTransitService gtfsTransitService,
+            StringRedisTemplate redisTemplate
+    ) {
         this.gtfsTransitService = gtfsTransitService;
+        this.redisTemplate = redisTemplate;
     }
 
     public RouteOptimizationResponse optimize(List<RoutePoint> points) {
@@ -32,11 +46,89 @@ public class RouteOptimizationService {
         CostMatrix matrix = buildCostMatrix(normalized);
 
         if (normalized.size() <= 2) {
-            return buildResponse(normalized, matrix, started);
+            return ensureWithinTimeLimit(buildResponse(normalized, matrix, started));
         }
 
         List<RoutePoint> optimized = optimizeWithConstraints(normalized, matrix);
-        return buildResponse(optimized, matrix, started);
+        return ensureWithinTimeLimit(buildResponse(optimized, matrix, started));
+    }
+
+    public RouteBenchmarkResponse optimizeBenchmark(List<RoutePoint> points) {
+        RouteOptimizationResponse withoutRedis = optimize(points);
+        CachedRouteResult cached = optimizeWithRedis(points);
+        long savedMillis = Math.max(0, withoutRedis.calculationMillis() - cached.response().calculationMillis());
+        double speedupPercent = withoutRedis.calculationMillis() == 0
+                ? 0
+                : Math.round((savedMillis * 1000.0 / withoutRedis.calculationMillis())) / 10.0;
+
+        return new RouteBenchmarkResponse(
+                withoutRedis,
+                cached.response(),
+                cached.cacheHit(),
+                savedMillis,
+                speedupPercent
+        );
+    }
+
+    private CachedRouteResult optimizeWithRedis(List<RoutePoint> points) {
+        List<RoutePoint> normalized = validateAndNormalize(points);
+        String key = cacheKey(normalized);
+        long started = System.nanoTime();
+
+        try {
+            String cached = redisTemplate.opsForValue().get(key);
+            if (cached != null) {
+                RouteOptimizationResponse response = objectMapper.readValue(cached, RouteOptimizationResponse.class);
+                long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
+                return new CachedRouteResult(withCalculationMillis(response, elapsedMillis), true);
+            }
+        } catch (Exception ignored) {
+            // Redis is an optimization layer; route calculation should still work when it is unavailable.
+        }
+
+        RouteOptimizationResponse response = optimize(normalized);
+        try {
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(response), CACHE_TTL);
+        } catch (JsonProcessingException ignored) {
+            // Ignore serialization failures and return the freshly calculated route.
+        } catch (Exception ignored) {
+            // Ignore Redis write failures and return the freshly calculated route.
+        }
+        return new CachedRouteResult(response, false);
+    }
+
+    private RouteOptimizationResponse withCalculationMillis(RouteOptimizationResponse response, long calculationMillis) {
+        return new RouteOptimizationResponse(
+                response.order(),
+                response.legs(),
+                response.costMatrixMinutes(),
+                response.costMatrixDistanceKm(),
+                response.nearestStops(),
+                response.totalDistanceKm(),
+                response.totalMinutes(),
+                calculationMillis,
+                response.costModel()
+        );
+    }
+
+    private RouteOptimizationResponse ensureWithinTimeLimit(RouteOptimizationResponse response) {
+        if (response.calculationMillis() > MAX_CALCULATION_MILLIS) {
+            throw new IllegalStateException("경로 계산 시간이 10초를 초과했습니다. 목적지를 줄이거나 고정 조건을 완화한 뒤 다시 계산해주세요.");
+        }
+        return response;
+    }
+
+    private String cacheKey(List<RoutePoint> points) {
+        String fingerprint = points.stream()
+                .map(point -> String.join(":",
+                        point.id(),
+                        String.format(Locale.ROOT, "%.5f", point.lat()),
+                        String.format(Locale.ROOT, "%.5f", point.lon()),
+                        String.valueOf(point.originalIndex()),
+                        point.routeRole()
+                ))
+                .collect(Collectors.joining("|"));
+        return "route:optimize:v1:" + Integer.toHexString(fingerprint.hashCode());
     }
 
     public RouteCompareResponse compare(List<RoutePoint> manualOrder) {
@@ -82,7 +174,7 @@ public class RouteOptimizationService {
             throw new IllegalArgumentException("At least 2 destinations with coordinates are required.");
         }
         if (points.size() > MAX_POINTS) {
-            throw new IllegalArgumentException("Route optimization supports up to 10 destinations.");
+            throw new IllegalArgumentException("Route optimization supports up to 20 destinations.");
         }
 
         List<RoutePoint> normalized = new ArrayList<>();
@@ -97,7 +189,8 @@ public class RouteOptimizationService {
                     point.lat(),
                     point.lon(),
                     point.originalIndex() == null ? i : point.originalIndex(),
-                    normalizeRole(point.routeRole())
+                    normalizeRole(point.routeRole()),
+                    normalizeTime(point.scheduledTime())
             ));
         }
         return normalized;
@@ -108,13 +201,23 @@ public class RouteOptimizationService {
         return value.trim().toUpperCase(Locale.ROOT);
     }
 
+    private String normalizeTime(String value) {
+        if (value == null || value.isBlank()) return null;
+        String trimmed = value.trim();
+        return timeToMinutes(trimmed) == null ? null : trimmed;
+    }
+
     private List<RoutePoint> optimizeWithConstraints(List<RoutePoint> points, CostMatrix matrix) {
         RoutePoint lodging = firstByRole(points, "LODGING");
         RoutePoint start = lodging != null ? lodging : firstByRole(points, "START");
         RoutePoint end = lodging != null ? lodging : firstByRole(points, "END");
         List<RoutePoint> fixed = points.stream()
                 .filter(point -> "FIXED".equals(point.routeRole()))
-                .sorted(Comparator.comparingInt(point -> point.originalIndex() == null ? Integer.MAX_VALUE : point.originalIndex()))
+                .sorted(Comparator
+                        .comparingInt((RoutePoint point) -> timeToMinutes(point.scheduledTime()) == null
+                                ? Integer.MAX_VALUE
+                                : timeToMinutes(point.scheduledTime()))
+                        .thenComparingInt(point -> point.originalIndex() == null ? Integer.MAX_VALUE : point.originalIndex()))
                 .toList();
 
         if (start == null && end == null && fixed.isEmpty()) {
@@ -408,6 +511,15 @@ public class RouteOptimizationService {
         return total;
     }
 
+    private Integer timeToMinutes(String value) {
+        if (value == null || !value.matches("^\\d{2}:\\d{2}$")) return null;
+        String[] parts = value.split(":");
+        int hour = Integer.parseInt(parts[0]);
+        int minute = Integer.parseInt(parts[1]);
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+        return hour * 60 + minute;
+    }
+
     private int[][] orderedMinutes(List<RoutePoint> order, CostMatrix matrix) {
         int[][] ordered = new int[order.size()][order.size()];
         for (int i = 0; i < order.size(); i++) {
@@ -464,5 +576,8 @@ public class RouteOptimizationService {
             }
             return index;
         }
+    }
+
+    private record CachedRouteResult(RouteOptimizationResponse response, boolean cacheHit) {
     }
 }

@@ -6,6 +6,7 @@ public record RoutePoint(
         double lat,
         double lon,
         Integer originalIndex,
-        String routeRole
+        String routeRole,
+        String scheduledTime
 ) {
 }

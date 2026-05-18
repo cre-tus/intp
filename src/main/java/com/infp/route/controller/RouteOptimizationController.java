@@ -2,6 +2,7 @@ package com.infp.route.controller;
 
 import com.infp.route.dto.RouteCompareRequest;
 import com.infp.route.dto.RouteCompareResponse;
+import com.infp.route.dto.RouteBenchmarkResponse;
 import com.infp.route.dto.RouteCostMatrixResponse;
 import com.infp.route.dto.RouteOptimizeRequest;
 import com.infp.route.dto.RouteOptimizationResponse;
@@ -28,6 +29,11 @@ public class RouteOptimizationController {
     @PostMapping("/optimize")
     public ResponseEntity<RouteOptimizationResponse> optimize(@RequestBody RouteOptimizeRequest request) {
         return ResponseEntity.ok(routeOptimizationService.optimize(request.points()));
+    }
+
+    @PostMapping("/optimize/benchmark")
+    public ResponseEntity<RouteBenchmarkResponse> optimizeBenchmark(@RequestBody RouteOptimizeRequest request) {
+        return ResponseEntity.ok(routeOptimizationService.optimizeBenchmark(request.points()));
     }
 
     @PostMapping("/compare")
