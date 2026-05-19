@@ -129,9 +129,10 @@ services:
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
     volumes:
       - ./nominatim/pbf:/data
-      - ./nominatim/data:/var/lib/postgresql/14/main
+      - nominatim_data:/var/lib/postgresql/14/main
     shm_size: 4gb
 
 volumes:
   mysql_data:
   gtfs_postgis_data:
+  nominatim_data:

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/authStore";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { ProfileIcon } from "./profile";
 
 export default function ProfileMenu() {
@@ -88,52 +88,35 @@ export default function ProfileMenu() {
                     </div>
 
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                        <button
-                            type="button"
-                            onClick={() => go("/mypage")}
-                            style={{
-                                padding: "12px 14px",
-                                cursor: "pointer",
-                                textAlign: "left",
-                                background: "#fff",
-                                border: 0,
-                            }}
-                        >
-                            마이페이지
-                        </button>
-
+                        <MenuButton onClick={() => go("/mypage")}>마이페이지</MenuButton>
                         {me?.role === "ADMIN" && (
-                            <button
-                                type="button"
-                                onClick={() => go("/admin/server-test")}
-                                style={{
-                                    padding: "12px 14px",
-                                    cursor: "pointer",
-                                    textAlign: "left",
-                                    background: "#fff",
-                                    border: 0,
-                                }}
-                            >
-                                서버 테스트
-                            </button>
+                            <>
+                                <MenuButton onClick={() => go("/admin/server-test")}>서버 테스트</MenuButton>
+                                <MenuButton onClick={() => go("/admin/payments")}>결제 관리하기</MenuButton>
+                            </>
                         )}
-
-                        <button
-                            type="button"
-                            onClick={() => void onLogout()}
-                            style={{
-                                padding: "12px 14px",
-                                cursor: "pointer",
-                                textAlign: "left",
-                                background: "#fff",
-                                border: 0,
-                            }}
-                        >
-                            로그아웃
-                        </button>
+                        <MenuButton onClick={() => void onLogout()}>로그아웃</MenuButton>
                     </div>
                 </div>
             )}
         </div>
+    );
+}
+
+function MenuButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            style={{
+                padding: "12px 14px",
+                cursor: "pointer",
+                textAlign: "left",
+                background: "#fff",
+                border: 0,
+            }}
+        >
+            {children}
+        </button>
     );
 }

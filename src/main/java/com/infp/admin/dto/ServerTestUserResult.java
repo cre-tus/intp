@@ -7,6 +7,8 @@ public record ServerTestUserResult(
         long withoutRedisMillis,
         long withRedisMillis,
         boolean cacheHit,
+        int cacheHitCount,
+        int cacheMissCount,
         String withoutRedisComplexity,
         String withRedisComplexity,
         long withoutRedisOperationCount,

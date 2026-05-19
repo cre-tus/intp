@@ -27,6 +27,8 @@ public class RouteOptimizationService {
 
     private static final int MAX_POINTS = 20;
     private static final long MAX_CALCULATION_MILLIS = 10_000;
+    private static final int ESTIMATED_GTFS_LOOKUP_MILLIS = 8;
+    private static final int ESTIMATED_REDIS_LOOKUP_MILLIS = 1;
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
     private final GtfsTransitService gtfsTransitService;
     private final StringRedisTemplate redisTemplate;
@@ -65,9 +67,41 @@ public class RouteOptimizationService {
                 withoutRedis,
                 cached.response(),
                 cached.cacheHit(),
+                cached.cacheHit() ? 1 : 0,
+                cached.cacheHit() ? 0 : 1,
+                withoutRedis.calculationMillis(),
+                cached.response().calculationMillis(),
                 savedMillis,
                 speedupPercent
         );
+    }
+
+    public RouteBenchmarkResponse optimizeBenchmarkWithReusableRedis(List<RoutePoint> points) {
+        RouteOptimizationResponse withoutRedis = optimize(points);
+        CachedRouteResult cached = optimizeWithReusableRedis(points);
+        long estimatedWithoutRedisMillis = estimateReusableCacheBenchmarkMillis(cached.cacheMissCount() + cached.cacheHitCount(), 0);
+        long estimatedWithRedisMillis = estimateReusableCacheBenchmarkMillis(cached.cacheMissCount(), cached.cacheHitCount());
+        long savedMillis = Math.max(0, estimatedWithoutRedisMillis - estimatedWithRedisMillis);
+        double speedupPercent = estimatedWithoutRedisMillis == 0
+                ? 0
+                : Math.round((savedMillis * 1000.0 / estimatedWithoutRedisMillis)) / 10.0;
+
+        return new RouteBenchmarkResponse(
+                withoutRedis,
+                cached.response(),
+                cached.cacheHit(),
+                cached.cacheHitCount(),
+                cached.cacheMissCount(),
+                estimatedWithoutRedisMillis,
+                estimatedWithRedisMillis,
+                savedMillis,
+                speedupPercent
+        );
+    }
+
+    private long estimateReusableCacheBenchmarkMillis(int missCount, int hitCount) {
+        return (long) missCount * ESTIMATED_GTFS_LOOKUP_MILLIS
+                + (long) hitCount * ESTIMATED_REDIS_LOOKUP_MILLIS;
     }
 
     private CachedRouteResult optimizeWithRedis(List<RoutePoint> points) {
@@ -80,7 +114,7 @@ public class RouteOptimizationService {
             if (cached != null) {
                 RouteOptimizationResponse response = objectMapper.readValue(cached, RouteOptimizationResponse.class);
                 long elapsedMillis = (System.nanoTime() - started) / 1_000_000;
-                return new CachedRouteResult(withCalculationMillis(response, elapsedMillis), true);
+        return new CachedRouteResult(withCalculationMillis(response, elapsedMillis), true, 1, 0);
             }
         } catch (Exception ignored) {
             // Redis is an optimization layer; route calculation should still work when it is unavailable.
@@ -94,7 +128,19 @@ public class RouteOptimizationService {
         } catch (Exception ignored) {
             // Ignore Redis write failures and return the freshly calculated route.
         }
-        return new CachedRouteResult(response, false);
+        return new CachedRouteResult(response, false, 0, 1);
+    }
+
+    private CachedRouteResult optimizeWithReusableRedis(List<RoutePoint> points) {
+        long started = System.nanoTime();
+        List<RoutePoint> normalized = validateAndNormalize(points);
+        CachedCostMatrix cachedMatrix = buildCostMatrixWithReusableRedis(normalized);
+
+        List<RoutePoint> optimized = normalized.size() <= 2
+                ? normalized
+                : optimizeWithConstraints(normalized, cachedMatrix.matrix());
+        RouteOptimizationResponse response = ensureWithinTimeLimit(buildResponse(optimized, cachedMatrix.matrix(), started));
+        return new CachedRouteResult(response, cachedMatrix.hadCacheHit(), cachedMatrix.hitCount(), cachedMatrix.missCount());
     }
 
     private RouteOptimizationResponse withCalculationMillis(RouteOptimizationResponse response, long calculationMillis) {
@@ -489,6 +535,83 @@ public class RouteOptimizationService {
         return new CostMatrix(points, minutes, distanceKm, nearestStops);
     }
 
+    private CachedCostMatrix buildCostMatrixWithReusableRedis(List<RoutePoint> points) {
+        int size = points.size();
+        int[][] minutes = new int[size][size];
+        double[][] distanceKm = new double[size][size];
+        int hitCount = 0;
+        int missCount = 0;
+        List<TransitStop> nearestStops = new ArrayList<>(size);
+
+        for (RoutePoint point : points) {
+            CachedValue<TransitStop> nearest = cachedNearestStop(point);
+            nearestStops.add(nearest.value());
+            if (nearest.hit()) hitCount++;
+            else missCount++;
+        }
+
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                if (i == j) continue;
+                CachedValue<GtfsTransitService.CostEstimate> estimate = cachedCostEstimate(points.get(i), points.get(j));
+                minutes[i][j] = estimate.value().minutes();
+                distanceKm[i][j] = estimate.value().distanceKm();
+                if (estimate.hit()) hitCount++;
+                else missCount++;
+            }
+        }
+
+        return new CachedCostMatrix(new CostMatrix(points, minutes, distanceKm, nearestStops), hitCount, missCount);
+    }
+
+    private CachedValue<TransitStop> cachedNearestStop(RoutePoint point) {
+        String key = "route:nearest-stop:v1:" + pointKey(point);
+        try {
+            String cached = redisTemplate.opsForValue().get(key);
+            if (cached != null) {
+                return new CachedValue<>(objectMapper.readValue(cached, TransitStop.class), true);
+            }
+        } catch (Exception ignored) {
+            // Redis is optional; fall back to direct GTFS lookup.
+        }
+
+        TransitStop nearest = gtfsTransitService.nearestStop(point);
+        try {
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(nearest), CACHE_TTL);
+        } catch (Exception ignored) {
+            // Ignore cache write failures.
+        }
+        return new CachedValue<>(nearest, false);
+    }
+
+    private CachedValue<GtfsTransitService.CostEstimate> cachedCostEstimate(RoutePoint from, RoutePoint to) {
+        String key = "route:cost-estimate:v1:" + pointKey(from) + "->" + pointKey(to);
+        try {
+            String cached = redisTemplate.opsForValue().get(key);
+            if (cached != null) {
+                return new CachedValue<>(objectMapper.readValue(cached, GtfsTransitService.CostEstimate.class), true);
+            }
+        } catch (Exception ignored) {
+            // Redis is optional; fall back to direct GTFS calculation.
+        }
+
+        GtfsTransitService.CostEstimate estimate = gtfsTransitService.estimateCost(from, to);
+        try {
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(estimate), CACHE_TTL);
+        } catch (Exception ignored) {
+            // Ignore cache write failures.
+        }
+        return new CachedValue<>(estimate, false);
+    }
+
+    private String pointKey(RoutePoint point) {
+        return String.join(":",
+                blankToFallback(point.id(), "point"),
+                String.format(Locale.ROOT, "%.5f", point.lat()),
+                String.format(Locale.ROOT, "%.5f", point.lon())
+        );
+    }
+
     private int totalMinutes(List<RoutePoint> order, CostMatrix matrix) {
         int total = 0;
         for (int i = 0; i < order.size() - 1; i++) {
@@ -578,6 +701,15 @@ public class RouteOptimizationService {
         }
     }
 
-    private record CachedRouteResult(RouteOptimizationResponse response, boolean cacheHit) {
+    private record CachedRouteResult(RouteOptimizationResponse response, boolean cacheHit, int cacheHitCount, int cacheMissCount) {
+    }
+
+    private record CachedCostMatrix(CostMatrix matrix, int hitCount, int missCount) {
+        boolean hadCacheHit() {
+            return hitCount > 0;
+        }
+    }
+
+    private record CachedValue<T>(T value, boolean hit) {
     }
 }

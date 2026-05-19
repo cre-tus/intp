@@ -24,13 +24,17 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<Void> login(@RequestBody LoginRequest req, HttpServletResponse res) {
-        System.out.println("Login HIT");
         // STEP 1) 로그인 처리
         // - 이메일로 유저 조회
         // - status 체크
         // - 비밀번호 matches()
         // - accessToken + refreshToken 생성
-        var pair = authService.login(req); // pair.accessToken(), pair.refreshToken()
+        final AuthService.TokenPair pair;
+        try {
+            pair = authService.login(req); // pair.accessToken(), pair.refreshToken()
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(401).build();
+        }
 
         // STEP 2) accessToken 쿠키 생성 (짧게)
         // - accessToken은 API 인증에 쓰는 토큰이라 짧게(예: 1시간)

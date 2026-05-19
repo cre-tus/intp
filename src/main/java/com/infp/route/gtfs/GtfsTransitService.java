@@ -80,6 +80,16 @@ public class GtfsTransitService {
                 .toList();
     }
 
+    public List<TransitStop> randomStopPool(int limit) {
+        int safeLimit = Math.max(2, Math.min(limit, stops.size()));
+        List<StopRow> shuffled = new ArrayList<>(stops);
+        Collections.shuffle(shuffled, ThreadLocalRandom.current());
+        return shuffled.stream()
+                .limit(safeLimit)
+                .map(stop -> stop.toTransitStop(0, routeNamesByStopId))
+                .toList();
+    }
+
     public CostEstimate estimateCost(RoutePoint from, RoutePoint to) {
         TransitStop fromStop = nearestStop(from);
         TransitStop toStop = nearestStop(to);

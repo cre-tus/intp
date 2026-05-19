@@ -19,6 +19,7 @@ import java.util.*;
 @Service
 public class PlaceAutocompleteService {
 
+    private static final Duration RESOLVED_CACHE_TTL = Duration.ofDays(7);
     // 좌표 정규화 로그 테스트
     private static final Logger log = LoggerFactory.getLogger(PlaceAutocompleteService.class);
     private static final Duration CACHE_TTL = Duration.ofHours(6);
@@ -62,6 +63,11 @@ public class PlaceAutocompleteService {
         // 🔹 입력이 비어있으면 바로 빈 리스트 반환
         if (s.isEmpty()) {
             return Mono.just(List.of());
+        }
+
+        PlaceItem resolved = readResolvedCache(s);
+        if (resolved != null) {
+            return Mono.just(List.of(resolved));
         }
 
         List<PlaceItem> cached = readCache(s);
@@ -135,7 +141,10 @@ public class PlaceAutocompleteService {
                             ? out.subList(0, 15)
                             : out;
                 })
-                .doOnNext(result -> writeCache(s, result));
+                .doOnNext(result -> {
+                    writeCache(s, result);
+                    writeResolvedCaches(s, result);
+                });
     }
 
     private List<PlaceItem> readCache(String query) {
@@ -156,7 +165,47 @@ public class PlaceAutocompleteService {
     }
 
     private String cacheKey(String query) {
-        return "place:autocomplete:v1:" + Integer.toHexString(query.toLowerCase(Locale.ROOT).hashCode());
+        return "place:autocomplete:v1:" + Integer.toHexString(normalizedKey(query).hashCode());
+    }
+
+    private PlaceItem readResolvedCache(String query) {
+        try {
+            String cached = redisTemplate.opsForValue().get(resolvedCacheKey(query));
+            return cached == null ? null : objectMapper.readValue(cached, PlaceItem.class);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void writeResolvedCaches(String query, List<PlaceItem> result) {
+        if (result == null || result.isEmpty()) return;
+        for (PlaceItem item : result) {
+            writeResolvedCache(query, item);
+            writeResolvedCache(item.title(), item);
+            writeResolvedCache(item.displayTitle(), item);
+            writeResolvedCache(item.titleKo(), item);
+            writeResolvedCache(item.titleEn(), item);
+            writeResolvedCache(item.titleJa(), item);
+        }
+    }
+
+    private void writeResolvedCache(String alias, PlaceItem item) {
+        if (alias == null || alias.isBlank() || item == null) return;
+        try {
+            redisTemplate.opsForValue().set(resolvedCacheKey(alias), objectMapper.writeValueAsString(item), RESOLVED_CACHE_TTL);
+        } catch (Exception ignored) {
+            // Resolved-place cache is only an optimization.
+        }
+    }
+
+    private String resolvedCacheKey(String query) {
+        return "place:resolved:v1:" + Integer.toHexString(normalizedKey(query).hashCode());
+    }
+
+    private String normalizedKey(String query) {
+        return query == null
+                ? ""
+                : query.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
     /**
