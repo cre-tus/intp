@@ -11,7 +11,9 @@ import { useAuthStore } from "@/stores/authStore";
 import {
     createEmptyTravelPlan,
     loadTravelPlan,
+    saveTravelPlanBeforeUnload,
     saveTravelPlan,
+    travelPlanNodeLimit,
     type TravelPlanDraft,
 } from "@/lib/travelPlans";
 
@@ -32,13 +34,11 @@ export default function HeroSection({ createId }: { createId?: string }) {
     const applyingRemoteRef = useRef(false);
     const pendingBroadcastRef = useRef(false);
     const draftRef = useRef<TravelPlanDraft | null>(null);
+    const dirtyRef = useRef(false);
     const editorRef = useRef({ name: "사용자", email: "" });
     const [syncStatus, setSyncStatus] = useState("오프라인 저장");
-    const [initialPlan] = useState<TravelPlanDraft>(() => {
-        const loaded = loadTravelPlan(planId) ?? createEmptyTravelPlan(planId);
-        saveTravelPlan(loaded);
-        return loaded;
-    });
+    const [initialPlan, setInitialPlan] = useState<TravelPlanDraft>(() => createEmptyTravelPlan(planId));
+    const [planLoading, setPlanLoading] = useState(true);
     const [title, setTitle] = useState(initialPlan.title);
     const [checklist, setChecklist] = useState<ChecklistItem[]>(initialPlan.checklist);
     const [participants, setParticipants] = useState<Participant[]>(initialPlan.participants);
@@ -53,6 +53,31 @@ export default function HeroSection({ createId }: { createId?: string }) {
     useEffect(() => {
         void fetchMe();
     }, [fetchMe]);
+
+    useEffect(() => {
+        let cancelled = false;
+        setPlanLoading(true);
+        loadTravelPlan(planId)
+            .then((loaded) => {
+                if (cancelled) return;
+                const next = loaded ?? createEmptyTravelPlan(planId);
+                setInitialPlan(next);
+                setTitle(next.title);
+                setChecklist(next.checklist);
+                setParticipants(next.participants);
+                setDays(next.days);
+                setRouteDayId(next.days[0]?.id ?? "");
+                setLastSavedAt(next.updatedAt);
+                dirtyRef.current = !loaded;
+                if (!loaded) void saveTravelPlan(next);
+            })
+            .finally(() => {
+                if (!cancelled) setPlanLoading(false);
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [planId]);
 
     const currentEditorName = me?.nickname || me?.email?.split("@")[0] || "사용자";
     const currentEditorEmail = me?.email ?? "";
@@ -111,16 +136,18 @@ export default function HeroSection({ createId }: { createId?: string }) {
         id: planId,
         title,
         template: initialPlan.template ?? "basic",
+        tier: initialPlan.tier ?? "FREE",
         checklist,
         participants,
         days,
         createdAt: initialPlan.createdAt,
         updatedAt: new Date().toISOString(),
-    }), [checklist, days, initialPlan.createdAt, initialPlan.template, participants, planId, title]);
+    }), [checklist, days, initialPlan.createdAt, initialPlan.template, initialPlan.tier, participants, planId, title]);
 
     useEffect(() => {
         draftRef.current = draft;
         editorRef.current = { name: currentEditorName, email: currentEditorEmail };
+        dirtyRef.current = true;
     }, [currentEditorEmail, currentEditorName, draft]);
 
     useEffect(() => {
@@ -172,7 +199,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
                     setChecklist(message.plan.checklist);
                     setParticipants(message.plan.participants);
                     setDays(message.plan.days);
-                    saveTravelPlan(message.plan);
+                    void saveTravelPlan(message.plan);
                     setLastSavedAt(message.plan.updatedAt);
                     setLastEditorName(message.editorName || message.editorEmail || "다른 사용자");
                     setLastEditorEmail(message.editorEmail ?? "");
@@ -194,10 +221,12 @@ export default function HeroSection({ createId }: { createId?: string }) {
         };
     }, [planId]);
 
-    const saveCurrentPlan = useCallback((broadcast = true) => {
+    const saveCurrentPlan = useCallback(async (broadcast = true) => {
         const saved = { ...draft, updatedAt: new Date().toISOString() };
-        saveTravelPlan(saved);
-        setLastSavedAt(saved.updatedAt);
+        const persisted = await saveTravelPlan(saved);
+        dirtyRef.current = false;
+        setInitialPlan(persisted);
+        setLastSavedAt(persisted.updatedAt);
         setLastEditorName(currentEditorName);
         setLastEditorEmail(currentEditorEmail);
 
@@ -223,13 +252,36 @@ export default function HeroSection({ createId }: { createId?: string }) {
     }, [currentEditorEmail, currentEditorName, draft]);
 
     useEffect(() => {
-        if (applyingRemoteRef.current) return;
-        const timer = window.setTimeout(() => saveCurrentPlan(false), 500);
-        return () => window.clearTimeout(timer);
+        const timer = window.setInterval(() => {
+            if (!dirtyRef.current || applyingRemoteRef.current) return;
+            void saveCurrentPlan(false);
+        }, 10 * 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, [saveCurrentPlan]);
+
+    useEffect(() => {
+        const flush = () => {
+            if (!dirtyRef.current) return;
+            const currentDraft = draftRef.current;
+            if (currentDraft && saveTravelPlanBeforeUnload(currentDraft)) {
+                dirtyRef.current = false;
+                return;
+            }
+            void saveCurrentPlan(false);
+        };
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "hidden") flush();
+        };
+        window.addEventListener("pagehide", flush);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => {
+            window.removeEventListener("pagehide", flush);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
     }, [saveCurrentPlan]);
 
     const commitRealtimeSync = useCallback(() => {
-        window.setTimeout(() => saveCurrentPlan(true), 0);
+        window.setTimeout(() => void saveCurrentPlan(true), 0);
     }, [saveCurrentPlan]);
 
     const applyOptimizedRoute = useCallback((dayId: string, orderedActivityIds: string[]) => {
@@ -275,7 +327,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
         ? `마지막 수정자: ${lastEditorName} (${lastEditorEmail})`
         : `마지막 수정자: ${lastEditorName}`;
 
-    if (!accessStatusReady) {
+    if (!accessStatusReady || planLoading) {
         return (
             <div className="min-h-screen bg-gray-50">
                 <div className="container mx-auto px-4 py-16">
@@ -388,6 +440,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
                         <div className="min-h-0 overflow-auto">
                             <MapRoutePanel
                                 days={days}
+                                maxNodes={travelPlanNodeLimit(draft)}
                                 initialSelectedDayId={selectedRouteDayId}
                                 forcedOpen
                                 onApplyOptimizedRoute={applyOptimizedRoute}

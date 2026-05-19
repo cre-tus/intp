@@ -1,8 +1,13 @@
 package com.infp.admin;
 
+import com.infp.admin.dto.ServerTestJobStartResponse;
+import com.infp.admin.dto.ServerTestJobStatusResponse;
 import com.infp.admin.dto.ServerTestRequest;
+import com.infp.admin.dto.ServerTestShuffleJobStatusResponse;
 import com.infp.admin.dto.ServerTestShuffleResponse;
 import com.infp.auth.jwt.JwtAuthFilter;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,6 +43,40 @@ public class AdminServerTestController {
         }
     }
 
+    @PostMapping("/server-test/start")
+    public ResponseEntity<?> startServerTest(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @RequestBody ServerTestRequest request
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(principal.role())) {
+            return ResponseEntity.status(403).build();
+        }
+        try {
+            ServerTestJobStartResponse response = adminServerTestService.startJob(request.nodeCount(), request.userCount(), request.users());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(exception.getMessage());
+        }
+    }
+
+    @GetMapping("/server-test/jobs/{jobId}")
+    public ResponseEntity<?> getServerTestJob(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @PathVariable String jobId
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(principal.role())) {
+            return ResponseEntity.status(403).build();
+        }
+        ServerTestJobStatusResponse response = adminServerTestService.jobStatus(jobId);
+        return response == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(response);
+    }
+
     @PostMapping("/server-test/shuffle")
     public ResponseEntity<ServerTestShuffleResponse> shuffleServerTestNodes(
             @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
@@ -50,5 +89,39 @@ public class AdminServerTestController {
             return ResponseEntity.status(403).build();
         }
         return ResponseEntity.ok(adminServerTestService.shuffle(request.nodeCount(), request.userCount()));
+    }
+
+    @PostMapping("/server-test/shuffle/start")
+    public ResponseEntity<?> startServerTestShuffle(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @RequestBody ServerTestRequest request
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(principal.role())) {
+            return ResponseEntity.status(403).build();
+        }
+        try {
+            ServerTestJobStartResponse response = adminServerTestService.startShuffleJob(request.nodeCount(), request.userCount());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(exception.getMessage());
+        }
+    }
+
+    @GetMapping("/server-test/shuffle/jobs/{jobId}")
+    public ResponseEntity<?> getServerTestShuffleJob(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @PathVariable String jobId
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(principal.role())) {
+            return ResponseEntity.status(403).build();
+        }
+        ServerTestShuffleJobStatusResponse response = adminServerTestService.shuffleJobStatus(jobId);
+        return response == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(response);
     }
 }

@@ -81,6 +81,11 @@ export default function TravelCheckList({
         );
     };
 
+    const updateChecklistItemCostInput = (itemId: number, value: string) => {
+        const digits = value.replace(/\D/g, "");
+        updateChecklistItemCost(itemId, digits ? Number(digits) : 0);
+    };
+
     // ===============================
     // 총 비용 계산
     // ===============================
@@ -137,14 +142,11 @@ export default function TravelCheckList({
 
                         {/* 비용 입력 */}
                         <input
-                            type="number"
-                            value={item.cost}
-                            onChange={(e) =>
-                                updateChecklistItemCost(
-                                    item.id,
-                                    Number(e.target.value) || 0
-                                )
-                            }
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            value={item.cost ? item.cost.toLocaleString() : ""}
+                            onChange={(e) => updateChecklistItemCostInput(item.id, e.target.value)}
                             placeholder="경비"
                             className="w-32 px-3 py-2 border rounded"
                         />

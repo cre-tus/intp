@@ -132,11 +132,13 @@ export default function MapRoutePanel({
     onApplyOptimizedRoute,
     forcedOpen = false,
     initialSelectedDayId,
+    maxNodes = 20,
 }: {
     days: ItineraryDay[];
     onApplyOptimizedRoute?: (dayId: string, orderedActivityIds: string[]) => void;
     forcedOpen?: boolean;
     initialSelectedDayId?: string | null;
+    maxNodes?: number;
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -413,8 +415,8 @@ export default function MapRoutePanel({
     const disabledReason =
         selectedPoints.length < 2
             ? "선택한 Day에 좌표가 있는 장소가 2개 이상이어야 경로를 계산할 수 있습니다."
-            : selectedPoints.length > 20
-                ? "TSP 최적화는 한 Day 안의 목적지 20개까지 지원합니다."
+            : selectedPoints.length > maxNodes
+                ? `현재 버전은 한 Day 안의 목적지 ${maxNodes}개까지 TSP 최적화를 지원합니다.`
                 : "";
 
     return (
