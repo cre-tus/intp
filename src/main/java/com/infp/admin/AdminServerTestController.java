@@ -1,7 +1,7 @@
 package com.infp.admin;
 
 import com.infp.admin.dto.ServerTestRequest;
-import com.infp.admin.dto.ServerTestResponse;
+import com.infp.admin.dto.ServerTestShuffleResponse;
 import com.infp.auth.jwt.JwtAuthFilter;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,7 +21,7 @@ public class AdminServerTestController {
     }
 
     @PostMapping("/server-test")
-    public ResponseEntity<ServerTestResponse> runServerTest(
+    public ResponseEntity<?> runServerTest(
             @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
             @RequestBody ServerTestRequest request
     ) {
@@ -31,6 +31,24 @@ public class AdminServerTestController {
         if (!"ADMIN".equals(principal.role())) {
             return ResponseEntity.status(403).build();
         }
-        return ResponseEntity.ok(adminServerTestService.run(request.nodeCount(), request.userCount()));
+        try {
+            return ResponseEntity.ok(adminServerTestService.run(request.nodeCount(), request.userCount(), request.users()));
+        } catch (IllegalArgumentException exception) {
+            return ResponseEntity.badRequest().body(exception.getMessage());
+        }
+    }
+
+    @PostMapping("/server-test/shuffle")
+    public ResponseEntity<ServerTestShuffleResponse> shuffleServerTestNodes(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @RequestBody ServerTestRequest request
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if (!"ADMIN".equals(principal.role())) {
+            return ResponseEntity.status(403).build();
+        }
+        return ResponseEntity.ok(adminServerTestService.shuffle(request.nodeCount(), request.userCount()));
     }
 }
