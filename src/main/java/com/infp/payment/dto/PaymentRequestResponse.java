@@ -10,6 +10,7 @@ public record PaymentRequestResponse(
         String requesterEmail,
         String requesterNickname,
         String depositorName,
+        String depositBank,
         String depositAccount,
         int amount,
         String status,

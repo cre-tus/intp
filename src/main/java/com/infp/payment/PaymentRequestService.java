@@ -30,6 +30,7 @@ public class PaymentRequestService {
         String planId = requireText(request.planId(), "템플릿 ID가 필요합니다.");
         String planTitle = requireText(request.planTitle(), "템플릿 이름이 필요합니다.");
         String depositorName = requireText(request.depositorName(), "입금주명을 입력해 주세요.");
+        String depositBank = requireText(request.depositBank(), "은행명을 입력해 주세요.");
         String depositAccount = requireText(request.depositAccount(), "입금계좌를 입력해 주세요.");
 
         repository.findFirstByPlanIdAndStatusOrderByCreatedAtDesc(planId, PaymentStatus.PENDING)
@@ -45,12 +46,14 @@ public class PaymentRequestService {
         entity.setPlanTitle(planTitle);
         entity.setRequester(requester);
         entity.setDepositorName(depositorName);
+        entity.setDepositBank(depositBank);
         entity.setDepositAccount(depositAccount);
         entity.setAmount(PAID_TEMPLATE_PRICE);
         entity.setStatus(PaymentStatus.PENDING);
         return toResponse(repository.save(entity));
     }
 
+    @Transactional(readOnly = true)
     public List<PaymentRequestResponse> listAll() {
         return repository.findAllByOrderByCreatedAtDesc().stream()
                 .map(this::toResponse)
@@ -84,6 +87,7 @@ public class PaymentRequestService {
                 requester.getEmail(),
                 requester.getNickname(),
                 entity.getDepositorName(),
+                entity.getDepositBank(),
                 entity.getDepositAccount(),
                 entity.getAmount(),
                 entity.getStatus().name(),

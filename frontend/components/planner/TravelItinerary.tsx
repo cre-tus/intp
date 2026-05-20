@@ -84,6 +84,9 @@ export default function TravelItinerary({
     title,
     setTitle,
     template = "basic",
+    tier = "FREE",
+    planId,
+    preparationCost = 0,
     onCostSelectionChange,
 }: {
     days: ItineraryDay[];
@@ -91,6 +94,9 @@ export default function TravelItinerary({
     title: string;
     setTitle: React.Dispatch<React.SetStateAction<string>>;
     template?: TravelPlanDraft["template"];
+    tier?: TravelPlanDraft["tier"];
+    planId?: string;
+    preparationCost?: number;
     onCostSelectionChange?: (cells: SelectedCostCell[]) => void;
 }) {
     const [timeErrors, setTimeErrors] = useState<Record<string, ActivityError>>({});
@@ -403,10 +409,11 @@ export default function TravelItinerary({
         );
     };
 
-    const totalCost = days.reduce(
+    const itineraryCost = days.reduce(
         (acc, day) => acc + day.activities.reduce((sum, activity) => sum + (activity.cost || 0), 0),
         0
     );
+    const totalCost = itineraryCost + preparationCost;
 
     return (
         <div className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
@@ -475,6 +482,8 @@ export default function TravelItinerary({
                                         onSetActivityTime={setTimeForActivity}
                                         onClearTimeError={clearTimeError}
                                         onReorderActivities={reorderActivities}
+                                        paidPlaces={tier === "PAID"}
+                                        planId={planId}
                                     />
                                 ))}
                             </SortableContext>
@@ -496,6 +505,11 @@ export default function TravelItinerary({
                                         {totalCost.toLocaleString()}
                                     </span>
                                     <span className="ml-1 text-lg text-gray-300">원</span>
+                                    {preparationCost > 0 && (
+                                        <div className="mt-1 text-xs font-medium text-gray-400">
+                                            준비물 {preparationCost.toLocaleString()}원 포함
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -512,6 +526,8 @@ export default function TravelItinerary({
                 onFixedOptionChange={(fixed) => {
                     setSpreadsheetPlaceTarget((current) => current ? { ...current, fixed } : current);
                 }}
+                paidPlaces={tier === "PAID"}
+                planId={planId}
             />
         </div>
     );

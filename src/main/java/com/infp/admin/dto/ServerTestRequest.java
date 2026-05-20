@@ -5,6 +5,7 @@ import java.util.List;
 public record ServerTestRequest(
         int nodeCount,
         int userCount,
+        String shuffleJobId,
         List<ServerTestUserNodes> users
 ) {
 }

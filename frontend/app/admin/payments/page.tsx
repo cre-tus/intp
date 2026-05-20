@@ -97,6 +97,7 @@ export default function AdminPaymentsPage() {
                                         <Th>템플릿</Th>
                                         <Th>신청자</Th>
                                         <Th>입금주명</Th>
+                                        <Th>은행명</Th>
                                         <Th>입금계좌</Th>
                                         <Th align="right">금액</Th>
                                         <Th>신청일시</Th>
@@ -119,6 +120,7 @@ export default function AdminPaymentsPage() {
                                                     <div className="mt-1 text-xs text-gray-500">{request.requesterEmail}</div>
                                                 </Td>
                                                 <Td>{request.depositorName}</Td>
+                                                <Td>{request.depositBank}</Td>
                                                 <Td>{request.depositAccount}</Td>
                                                 <Td align="right">{request.amount.toLocaleString()}원</Td>
                                                 <Td>{new Date(request.createdAt).toLocaleString("ko-KR")}</Td>

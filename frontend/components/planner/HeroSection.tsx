@@ -221,8 +221,9 @@ export default function HeroSection({ createId }: { createId?: string }) {
         };
     }, [planId]);
 
-    const saveCurrentPlan = useCallback(async (broadcast = true) => {
-        const saved = { ...draft, updatedAt: new Date().toISOString() };
+    const saveCurrentPlan = useCallback(async (broadcast = true, planOverride?: TravelPlanDraft) => {
+        const source = planOverride ?? draft;
+        const saved = { ...source, updatedAt: new Date().toISOString() };
         const persisted = await saveTravelPlan(saved);
         dirtyRef.current = false;
         setInitialPlan(persisted);
@@ -280,30 +281,38 @@ export default function HeroSection({ createId }: { createId?: string }) {
         };
     }, [saveCurrentPlan]);
 
-    const commitRealtimeSync = useCallback(() => {
-        window.setTimeout(() => void saveCurrentPlan(true), 0);
+    const commitRealtimeSync = useCallback((planOverride?: TravelPlanDraft) => {
+        window.setTimeout(() => void saveCurrentPlan(true, planOverride), 0);
     }, [saveCurrentPlan]);
 
     const applyOptimizedRoute = useCallback((dayId: string, orderedActivityIds: string[]) => {
         const uniqueOrder = Array.from(new Set(orderedActivityIds));
         if (uniqueOrder.length === 0) return;
 
-        setDays((prev) =>
-            prev.map((day) => {
-                if (day.id !== dayId) return day;
-                const orderIndex = new Map(uniqueOrder.map((id, index) => [id, index]));
-                const activities = [...day.activities].sort((left, right) => {
-                    const leftIndex = orderIndex.get(left.id);
-                    const rightIndex = orderIndex.get(right.id);
-                    if (leftIndex == null && rightIndex == null) return 0;
-                    if (leftIndex == null) return 1;
-                    if (rightIndex == null) return -1;
-                    return leftIndex - rightIndex;
-                });
-                return { ...day, activities };
-            })
-        );
-    }, []);
+        const currentDraft = draftRef.current ?? draft;
+        const nextDays = currentDraft.days.map((day) => {
+            if (day.id !== dayId) return day;
+            if (currentDraft.template === "spreadsheet") {
+                return applySpreadsheetOptimizedRoute(day, uniqueOrder);
+            }
+            const orderIndex = new Map(uniqueOrder.map((id, index) => [id, index]));
+            const activities = [...day.activities].sort((left, right) => {
+                const leftIndex = orderIndex.get(left.id);
+                const rightIndex = orderIndex.get(right.id);
+                if (leftIndex == null && rightIndex == null) return 0;
+                if (leftIndex == null) return 1;
+                if (rightIndex == null) return -1;
+                return leftIndex - rightIndex;
+            });
+            return { ...day, activities };
+        });
+
+        const nextDraft = { ...currentDraft, days: nextDays, updatedAt: new Date().toISOString() };
+        draftRef.current = nextDraft;
+        setDays(nextDays);
+        setRouteModalOpen(false);
+        commitRealtimeSync(nextDraft);
+    }, [commitRealtimeSync, draft]);
 
     const handleCommitKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
         if (event.key !== "Enter") return;
@@ -363,7 +372,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
     return (
         <div
             className="min-h-screen bg-gray-50"
-            onBlurCapture={commitRealtimeSync}
+            onBlurCapture={() => commitRealtimeSync()}
             onKeyDownCapture={handleCommitKeyDown}
             onClickCapture={handleCommitClick}
         >
@@ -389,6 +398,8 @@ export default function HeroSection({ createId }: { createId?: string }) {
                             days={days}
                             setDays={setDays}
                             template={draft.template}
+                            tier={draft.tier}
+                            planId={planId}
                             onCostSelectionChange={setSelectedCostCells}
                         />
                     </div>
@@ -442,6 +453,8 @@ export default function HeroSection({ createId }: { createId?: string }) {
                                 days={days}
                                 maxNodes={travelPlanNodeLimit(draft)}
                                 initialSelectedDayId={selectedRouteDayId}
+                                paidMaps={draft.tier === "PAID"}
+                                planId={planId}
                                 forcedOpen
                                 onApplyOptimizedRoute={applyOptimizedRoute}
                             />
@@ -451,6 +464,50 @@ export default function HeroSection({ createId }: { createId?: string }) {
             )}
         </div>
     );
+}
+
+function applySpreadsheetOptimizedRoute(day: ItineraryDay, orderedActivityIds: string[]): ItineraryDay {
+    const byId = new Map(day.activities.map((activity) => [activity.id, activity]));
+    const orderedSources = orderedActivityIds
+        .map((id) => byId.get(id))
+        .filter((activity): activity is ItineraryDay["activities"][number] => Boolean(activity));
+    if (orderedSources.length === 0) return day;
+
+    const targetSlots = day.activities
+        .filter((activity) => byId.has(activity.id) && orderedActivityIds.includes(activity.id))
+        .sort((left, right) => spreadsheetRouteSlotOrder(left.time) - spreadsheetRouteSlotOrder(right.time));
+
+    const sourceByTargetId = new Map(
+        targetSlots.map((slot, index) => [slot.id, orderedSources[index]] as const)
+    );
+
+    return {
+        ...day,
+        activities: day.activities.map((activity) => {
+            const source = sourceByTargetId.get(activity.id);
+            if (!source) return activity;
+            return {
+                ...activity,
+                location: source.location,
+                activity: source.activity,
+                cost: source.cost,
+                placeId: source.placeId,
+                placeSubtitle: source.placeSubtitle,
+                lat: source.lat,
+                lon: source.lon,
+                routeRole: activity.routeRole === "LODGING" ? "LODGING" : source.routeRole === "LODGING" ? "NONE" : source.routeRole,
+            };
+        }),
+    };
+}
+
+function spreadsheetRouteSlotOrder(rowKey: string) {
+    if (rowKey === "__lodging__") return -1;
+    if (/^\d{2}:\d{2}$/.test(rowKey)) {
+        const [hour, minute] = rowKey.split(":").map(Number);
+        return hour * 60 + minute;
+    }
+    return Number.MAX_SAFE_INTEGER;
 }
 
 function RouteCalculatorLauncher({

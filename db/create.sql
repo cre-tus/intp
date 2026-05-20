@@ -178,6 +178,7 @@ CREATE TABLE payment_requests (
     plan_title VARCHAR(200) NOT NULL COMMENT '템플릿 제목',
     requester_user_id BIGINT UNSIGNED NOT NULL COMMENT '요청 사용자',
     depositor_name VARCHAR(100) NOT NULL COMMENT '입금자명',
+    deposit_bank VARCHAR(100) NOT NULL DEFAULT '' COMMENT '입금 은행명',
     deposit_account VARCHAR(100) NOT NULL COMMENT '입금 계좌번호',
     amount INT UNSIGNED NOT NULL DEFAULT 3500 COMMENT '금액',
     status ENUM('PENDING','APPROVED') NOT NULL DEFAULT 'PENDING' COMMENT '처리 상태',

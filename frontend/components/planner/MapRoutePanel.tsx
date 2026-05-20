@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Database, GitCompareArrows, MapPinned, RotateCcw, Route, TrainFront } from "lucide-react";
 import type { ItineraryDay } from "@/components/planner/TravelItinerary";
+import { loadGoogleMaps, type GoogleMap, type GoogleMarker, type GooglePolyline } from "@/lib/googleMaps";
 
 type LatLngTuple = [number, number];
 type LeafletLayer = {
@@ -25,6 +26,7 @@ type LeafletApi = {
     polyline(latLngs: LatLngTuple[], options: Record<string, unknown>): LeafletLayer;
     divIcon(options: Record<string, unknown>): unknown;
 };
+type GoogleOverlay = GoogleMarker | GooglePolyline;
 
 type RoutePoint = {
     id: string;
@@ -133,18 +135,25 @@ export default function MapRoutePanel({
     forcedOpen = false,
     initialSelectedDayId,
     maxNodes = 20,
+    paidMaps = false,
+    planId,
 }: {
     days: ItineraryDay[];
     onApplyOptimizedRoute?: (dayId: string, orderedActivityIds: string[]) => void;
     forcedOpen?: boolean;
     initialSelectedDayId?: string | null;
     maxNodes?: number;
+    paidMaps?: boolean;
+    planId?: string;
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
     const layersRef = useRef<LeafletLayer[]>([]);
+    const googleMapRef = useRef<GoogleMap | null>(null);
+    const googleOverlaysRef = useRef<GoogleOverlay[]>([]);
     const [open, setOpen] = useState(false);
     const [leafletReady, setLeafletReady] = useState(false);
+    const [googleReady, setGoogleReady] = useState(false);
     const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
     const [nearestStopsByPointId, setNearestStopsByPointId] = useState<Record<string, TransitStop | undefined>>({});
     const [optimized, setOptimized] = useState<RouteResult | null>(null);
@@ -154,6 +163,7 @@ export default function MapRoutePanel({
     const [lastAction, setLastAction] = useState<"optimize" | "compare" | null>(null);
     const [loading, setLoading] = useState<"optimize" | "compare" | "stops" | null>(null);
     const panelOpen = forcedOpen || open;
+    const googleMapEnabled = Boolean(paidMaps && planId);
 
     const points = useMemo<RoutePoint[]>(() => {
         let index = 0;
@@ -253,7 +263,32 @@ export default function MapRoutePanel({
             mapRef.current?.remove();
             mapRef.current = null;
             setLeafletReady(false);
+            googleOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+            googleOverlaysRef.current = [];
+            googleMapRef.current = null;
+            setGoogleReady(false);
             return;
+        }
+
+        if (googleMapEnabled && planId) {
+            loadGoogleMaps(planId)
+                .then((googleMaps) => {
+                    if (!mounted || !mapElementRef.current || googleMapRef.current) return;
+                    googleMapRef.current = new googleMaps.Map(mapElementRef.current, {
+                        center: { lat: 35.6812, lng: 139.7671 },
+                        zoom: 11,
+                        mapTypeControl: false,
+                        streetViewControl: false,
+                        fullscreenControl: false,
+                    });
+                    setGoogleReady(true);
+                    setError("");
+                })
+                .catch(() => setError("Google 지도를 불러오지 못했습니다."));
+
+            return () => {
+                mounted = false;
+            };
         }
 
         loadLeaflet()
@@ -283,9 +318,10 @@ export default function MapRoutePanel({
         return () => {
             mounted = false;
         };
-    }, [panelOpen]);
+    }, [googleMapEnabled, panelOpen, planId]);
 
     useEffect(() => {
+        if (googleMapEnabled) return;
         if (!leafletReady || !window.L || !mapRef.current) return;
         const L = window.L;
         const map = mapRef.current;
@@ -353,7 +389,95 @@ export default function MapRoutePanel({
         } else if (routeOrder.length === 1) {
             map.setView([routeOrder[0].lat, routeOrder[0].lon], 14);
         }
-    }, [leafletReady, nearestStopsByPointId, optimized, selectedPoints]);
+    }, [googleMapEnabled, leafletReady, nearestStopsByPointId, optimized, selectedPoints]);
+
+    useEffect(() => {
+        if (!googleMapEnabled || !googleReady || !googleMapRef.current || !planId) return;
+        let cancelled = false;
+
+        loadGoogleMaps(planId)
+            .then((googleMaps) => {
+                if (cancelled || !googleMapRef.current) return;
+                const map = googleMapRef.current;
+
+                googleOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+                googleOverlaysRef.current = [];
+
+                const routeOrder = optimized?.order ?? selectedPoints;
+                const bounds = new googleMaps.LatLngBounds();
+                routeOrder.forEach((point, idx) => {
+                    const marker = new googleMaps.Marker({
+                        map,
+                        position: { lat: point.lat, lng: point.lon },
+                        label: {
+                            text: String(idx + 1),
+                            color: readableTextColor(routeColor(idx)),
+                            fontWeight: "900",
+                        },
+                        title: point.name,
+                    });
+                    const infoWindow = new googleMaps.InfoWindow({
+                        content: `<strong style="color:${routeColor(idx)}">${idx + 1}. ${escapeHtml(point.name)}</strong><br/>${escapeHtml(point.dayTitle)}`,
+                    });
+                    marker.addListener("click", () => infoWindow.open({ map, anchor: marker }));
+                    googleOverlaysRef.current.push(marker);
+                    bounds.extend({ lat: point.lat, lng: point.lon });
+                });
+
+                routeOrder.forEach((point) => {
+                    const stop = nearestStopsByPointId[point.id];
+                    if (!stop) return;
+                    const marker = new googleMaps.Marker({
+                        map,
+                        position: { lat: stop.lat, lng: stop.lon },
+                        title: stop.name,
+                    });
+                    const infoWindow = new googleMaps.InfoWindow({
+                        content: `<strong>${escapeHtml(stop.name)}</strong><br/>${stop.distanceMeters}m`,
+                    });
+                    marker.addListener("click", () => infoWindow.open({ map, anchor: marker }));
+                    googleOverlaysRef.current.push(marker);
+                    bounds.extend({ lat: stop.lat, lng: stop.lon });
+                });
+
+                if (routeOrder.length >= 2) {
+                    if (optimized) {
+                        const dayLine = new googleMaps.Polyline({
+                            map,
+                            path: selectedPoints.map((point) => ({ lat: point.lat, lng: point.lon })),
+                            strokeColor: "#94a3b8",
+                            strokeOpacity: 0.55,
+                            strokeWeight: 2,
+                        });
+                        googleOverlaysRef.current.push(dayLine);
+                    }
+
+                    routeOrder.slice(0, -1).forEach((point, idx) => {
+                        const next = routeOrder[idx + 1];
+                        const segment = new googleMaps.Polyline({
+                            map,
+                            path: [
+                                { lat: point.lat, lng: point.lon },
+                                { lat: next.lat, lng: next.lon },
+                            ],
+                            strokeColor: routeColor(idx),
+                            strokeOpacity: 0.95,
+                            strokeWeight: 6,
+                        });
+                        googleOverlaysRef.current.push(segment);
+                    });
+                    map.fitBounds(bounds);
+                } else if (routeOrder.length === 1) {
+                    map.setCenter({ lat: routeOrder[0].lat, lng: routeOrder[0].lon });
+                    map.setZoom(14);
+                }
+            })
+            .catch(() => setError("Google 지도 표시 중 오류가 발생했습니다."));
+
+        return () => {
+            cancelled = true;
+        };
+    }, [googleMapEnabled, googleReady, nearestStopsByPointId, optimized, planId, selectedPoints]);
 
     const selectDay = (dayId: string) => {
         setSelectedDayId(dayId);

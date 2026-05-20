@@ -76,13 +76,14 @@ function AdminServerTest() {
     const [completedUsers, setCompletedUsers] = useState(0);
     const [error, setError] = useState("");
     const [shuffle, setShuffle] = useState<ServerTestShuffleResponse | null>(null);
+    const [shuffleJobId, setShuffleJobId] = useState("");
     const [result, setResult] = useState<ServerTestResponse | null>(null);
     const [openRouteUserIndex, setOpenRouteUserIndex] = useState<number | null>(null);
 
     const isAdmin = me?.role === "ADMIN";
     const nodeCount = parsePositiveInteger(nodeCountInput);
     const userCount = parsePositiveInteger(userCountInput);
-    const hasValidShuffle = shuffle?.nodeCount === nodeCount && shuffle?.userCount === userCount;
+    const hasValidShuffle = Boolean(shuffleJobId) && shuffle?.nodeCount === nodeCount && shuffle?.userCount === userCount;
     const sortedResults = useMemo(
         () => result?.results.slice().sort((a, b) => a.userIndex - b.userIndex) ?? [],
         [result],
@@ -92,6 +93,7 @@ function AdminServerTest() {
 
     const clearPreparedData = () => {
         setShuffle(null);
+        setShuffleJobId("");
         setResult(null);
         setOpenRouteUserIndex(null);
         setProgress(0);
@@ -127,9 +129,11 @@ function AdminServerTest() {
             );
             if (finalStatus.status === "FAILED") throw new Error(finalStatus.error ?? "노드 셔플에 실패했습니다.");
             if (!finalStatus.result) throw new Error("노드 셔플 결과를 불러오지 못했습니다.");
+            setShuffleJobId(start.data.jobId);
             setShuffle(finalStatus.result);
         } catch (err) {
             setError(readErrorMessage(err, "노드 셔플에 실패했습니다."));
+            setShuffleJobId("");
             setShuffle(null);
         } finally {
             setShuffleLoading(false);
@@ -155,7 +159,7 @@ function AdminServerTest() {
         try {
             const start = await api.post<ServerTestJobStartResponse>("/api/admin/server-test/start", {
                 ...inputs,
-                users: shuffle.users,
+                shuffleJobId,
             });
             const finalStatus = await pollJob<ServerTestResponse>(
                 `/api/admin/server-test/jobs/${start.data.jobId}`,

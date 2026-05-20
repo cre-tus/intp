@@ -1,8 +1,5 @@
 package com.infp.travel;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.infp.travel.dto.TravelPlanRequest;
 import com.infp.travel.dto.TravelPlanResponse;
 import com.infp.travel.dto.TravelPlanSummaryResponse;
@@ -14,6 +11,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 @Service
 public class TravelPlanService {
@@ -89,6 +89,14 @@ public class TravelPlanService {
                 // tier column is authoritative when content patching fails.
             }
         });
+    }
+
+    public void requirePaidOwnerPlan(String externalId, long userId) {
+        TravelPlanEntity entity = requirePlan(externalId);
+        requireOwner(entity, userId);
+        if (!"PAID".equals(entity.getTier())) {
+            throw new IllegalArgumentException("유료 템플릿에서만 Google 장소 검색을 사용할 수 있습니다.");
+        }
     }
 
     private TravelPlanEntity requirePlan(String externalId) {

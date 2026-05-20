@@ -1,5 +1,6 @@
-import { Search } from "lucide-react";
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { Globe2, Search } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { loadGoogleMaps, type GoogleMap, type GoogleMarker } from "@/lib/googleMaps";
 
 export type PlaceResult = {
     id: string;
@@ -25,6 +26,7 @@ type PlaceApiResult = {
     lon: number | string;
 };
 
+type SearchProvider = "local" | "google";
 type LatLngTuple = [number, number];
 type LeafletMarker = {
     addTo(map: LeafletMap): LeafletMarker;
@@ -87,11 +89,17 @@ export default function PlaceSearchInput(props: {
     showFixedOption?: boolean;
     fixedOptionChecked?: boolean;
     onFixedOptionChange?: (checked: boolean) => void;
+    paidPlaces?: boolean;
+    planId?: string;
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
     const markerRef = useRef<LeafletMarker | null>(null);
+    const googleMapRef = useRef<GoogleMap | null>(null);
+    const googleMarkerRef = useRef<GoogleMarker | null>(null);
+    const searchCacheRef = useRef<Map<string, PlaceResult[]>>(new Map());
     const [q, setQ] = useState(props.initialQuery ?? "");
+    const [provider, setProvider] = useState<SearchProvider>("local");
     const [items, setItems] = useState<PlaceResult[]>([]);
     const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
     const [manualName, setManualName] = useState(props.initialQuery ?? "");
@@ -112,44 +120,101 @@ export default function PlaceSearchInput(props: {
         parsedLon >= -180 &&
         parsedLon <= 180;
 
+    const normalizedQuery = q.trim();
+    const googleEnabled = Boolean(props.paidPlaces && props.planId);
+    const googleMapEnabled = Boolean(props.paidPlaces && props.planId);
+    const canGoogleSearch = googleEnabled && normalizedQuery.length >= 3;
+
+    const runSearch = useCallback(async (nextProvider: SearchProvider = provider) => {
+        const query = q.trim();
+        if (!query || (nextProvider === "google" && query.length < 3)) {
+            setItems([]);
+            return;
+        }
+        if (nextProvider === "google" && !googleEnabled) {
+            setError("유료 템플릿에서만 Google 장소 검색을 사용할 수 있습니다.");
+            return;
+        }
+
+        const cacheKey = `${nextProvider}:${query.toLowerCase()}`;
+        const cached = searchCacheRef.current.get(cacheKey);
+        if (cached) {
+            setItems(cached);
+            setError("");
+            return;
+        }
+
+        setLoading(true);
+        setError("");
+        try {
+            const url = nextProvider === "google"
+                ? `/api/place/google/search?planId=${encodeURIComponent(props.planId ?? "")}&q=${encodeURIComponent(query)}`
+                : `/api/place/autocomplete?q=${encodeURIComponent(query)}`;
+            const res = await fetch(url);
+            if (!res.ok) {
+                const message = await res.text();
+                throw new Error(message || "장소 검색에 실패했습니다.");
+            }
+            const data = await res.json() as PlaceApiResult[];
+            const mapped = data.map(toPlaceResult);
+            searchCacheRef.current.set(cacheKey, mapped);
+            setItems(mapped);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "장소 검색에 실패했습니다.");
+        } finally {
+            setLoading(false);
+        }
+    }, [googleEnabled, props.planId, provider, q]);
+
     useEffect(() => {
-        if (!q.trim()) {
+        if (provider !== "local") return;
+        if (!normalizedQuery) {
             const timer = setTimeout(() => setItems([]), 0);
             return () => clearTimeout(timer);
         }
 
-        const timer = setTimeout(async () => {
-            setLoading(true);
-            setError("");
-            try {
-                const res = await fetch(`/api/place/autocomplete?q=${encodeURIComponent(q)}`);
-                if (!res.ok) throw new Error("장소 검색에 실패했습니다.");
-                const data = await res.json() as PlaceApiResult[];
-                setItems(
-                    data.map((item) => ({
-                        id: item.id,
-                        title: item.title,
-                        displayTitle: item.displayTitle,
-                        titleKo: item.titleKo,
-                        titleEn: item.titleEn,
-                        titleJa: item.titleJa,
-                        subtitle: item.subtitle,
-                        lat: Number(item.lat),
-                        lon: Number(item.lon),
-                    }))
-                );
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "장소 검색에 실패했습니다.");
-            } finally {
-                setLoading(false);
-            }
-        }, 250);
-
+        const timer = setTimeout(() => {
+            void runSearch("local");
+        }, 350);
         return () => clearTimeout(timer);
-    }, [q]);
+    }, [normalizedQuery, provider, runSearch]);
 
     useEffect(() => {
         let mounted = true;
+        if (googleMapEnabled && props.planId) {
+            loadGoogleMaps(props.planId)
+                .then((googleMaps) => {
+                    if (!mounted || !mapElementRef.current || googleMapRef.current) return;
+                    const map = new googleMaps.Map(mapElementRef.current, {
+                        center: { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] },
+                        zoom: 12,
+                        mapTypeControl: false,
+                        streetViewControl: false,
+                        fullscreenControl: false,
+                    });
+                    map.addListener("click", (event) => {
+                        const latLng = event.latLng;
+                        if (!latLng) return;
+                        const lat = Number(latLng.lat().toFixed(6));
+                        const lon = Number(latLng.lng().toFixed(6));
+                        setSelectedPlace(null);
+                        setManualName((current) => current.trim() || "지도 선택 위치");
+                        setManualLat(String(lat));
+                        setManualLon(String(lon));
+                        placeGoogleMarker(googleMaps, map, googleMarkerRef, lat, lon, "지도 선택 위치");
+                    });
+                    googleMapRef.current = map;
+                    setMapError("");
+                })
+                .catch(() => setMapError("Google 지도를 불러오지 못해 로컬 지도를 사용합니다."));
+        }
+
+        if (googleMapEnabled) {
+            return () => {
+                mounted = false;
+            };
+        }
+
         loadLeaflet()
             .then((L) => {
                 if (!mounted || !mapElementRef.current || mapRef.current) return;
@@ -187,7 +252,7 @@ export default function PlaceSearchInput(props: {
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [googleMapEnabled, props.planId]);
 
     const selectPlace = (item: PlaceResult) => {
         if (!hasValidCoordinates(item.lat, item.lon)) {
@@ -198,6 +263,17 @@ export default function PlaceSearchInput(props: {
         setManualName(item.title);
         setManualLat(String(item.lat));
         setManualLon(String(item.lon));
+        if (googleMapRef.current && props.planId) {
+            loadGoogleMaps(props.planId)
+                .then((googleMaps) => {
+                    if (!googleMapRef.current) return;
+                    placeGoogleMarker(googleMaps, googleMapRef.current, googleMarkerRef, item.lat, item.lon, item.displayTitle ?? item.title);
+                    googleMapRef.current.setCenter({ lat: item.lat, lng: item.lon });
+                    googleMapRef.current.setZoom(15);
+                })
+                .catch(() => undefined);
+            return;
+        }
         const browserWindow = window as Window & { L?: LeafletApi };
         if (browserWindow.L && mapRef.current) {
             placeMarker(browserWindow.L, mapRef.current, markerRef, item.lat, item.lon, item.displayTitle ?? item.title);
@@ -221,15 +297,62 @@ export default function PlaceSearchInput(props: {
     return (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
             <div>
-                <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                    <Search className="h-4 w-4 text-gray-500" />
-                    <input
-                        autoFocus
-                        value={q}
-                        onChange={(event) => setQ(event.target.value)}
-                        placeholder="예: 신주쿠역, 우에노 공원"
-                        className="w-full bg-transparent focus:outline-none"
-                    />
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                        <Search className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                        <input
+                            autoFocus
+                            value={q}
+                            onChange={(event) => setQ(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === "Enter") void runSearch(provider);
+                            }}
+                            placeholder="예: 신주쿠역, 우에노 공원"
+                            className="w-full min-w-0 bg-transparent focus:outline-none"
+                        />
+                    </div>
+
+                    {props.paidPlaces && (
+                        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setProvider("local");
+                                    setError("");
+                                    void runSearch("local");
+                                }}
+                                className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                                    provider === "local" ? "bg-gray-950 text-white" : "text-gray-700 hover:bg-gray-100"
+                                }`}
+                            >
+                                로컬
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setProvider("google");
+                                    setError("");
+                                }}
+                                className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold ${
+                                    provider === "google" ? "bg-gray-950 text-white" : "text-gray-700 hover:bg-gray-100"
+                                }`}
+                            >
+                                <Globe2 className="h-3.5 w-3.5" />
+                                Google
+                            </button>
+                        </div>
+                    )}
+
+                    {provider === "google" && (
+                        <button
+                            type="button"
+                            disabled={!canGoogleSearch || loading}
+                            onClick={() => void runSearch("google")}
+                            className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                        >
+                            검색
+                        </button>
+                    )}
                 </div>
 
                 <div className="mt-3 grid gap-2 rounded-lg border border-gray-200 bg-white p-3">
@@ -318,6 +441,20 @@ export default function PlaceSearchInput(props: {
     );
 }
 
+function toPlaceResult(item: PlaceApiResult): PlaceResult {
+    return {
+        id: item.id,
+        title: item.title,
+        displayTitle: item.displayTitle,
+        titleKo: item.titleKo,
+        titleEn: item.titleEn,
+        titleJa: item.titleJa,
+        subtitle: item.subtitle,
+        lat: Number(item.lat),
+        lon: Number(item.lon),
+    };
+}
+
 function hasValidCoordinates(lat: number, lon: number) {
     return (
         Number.isFinite(lat) &&
@@ -342,4 +479,36 @@ function placeMarker(
         return;
     }
     markerRef.current = L.marker([lat, lon]).addTo(map).bindPopup?.(label) ?? null;
+}
+
+function placeGoogleMarker(
+    googleMaps: Awaited<ReturnType<typeof loadGoogleMaps>>,
+    map: GoogleMap,
+    markerRef: MutableRefObject<GoogleMarker | null>,
+    lat: number,
+    lon: number,
+    label: string
+) {
+    const position = { lat, lng: lon };
+    if (markerRef.current) {
+        markerRef.current.setPosition(position);
+        return;
+    }
+    const marker = new googleMaps.Marker({
+        map,
+        position,
+        title: label,
+    });
+    const infoWindow = new googleMaps.InfoWindow({ content: escapeHtml(label) });
+    marker.addListener("click", () => infoWindow.open({ map, anchor: marker }));
+    markerRef.current = marker;
+}
+
+function escapeHtml(value: unknown) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
 }

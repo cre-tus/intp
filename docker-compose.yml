@@ -73,6 +73,8 @@ services:
       GTFS_DB_NAME: ${GTFS_POSTGRES_DB:-gtfs}
       GTFS_DB_USER: ${GTFS_POSTGRES_USER:-gtfs}
       GTFS_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
+      GOOGLE_MAP_API: ${GOOGLE_MAP_API:-}
+      GOOGLE_PRIVATE_API: ${GOOGLE_PRIVATE_API:-}
       TZ: Asia/Seoul
     ports:
       - "8080:8080"
