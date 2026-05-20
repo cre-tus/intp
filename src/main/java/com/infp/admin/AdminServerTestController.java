@@ -55,7 +55,7 @@ public class AdminServerTestController {
             return ResponseEntity.status(403).build();
         }
         try {
-            ServerTestJobStartResponse response = adminServerTestService.startJob(request.nodeCount(), request.userCount(), request.users());
+            ServerTestJobStartResponse response = adminServerTestService.startJob(request.nodeCount(), request.userCount(), request.shuffleJobId(), request.users());
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException exception) {
             return ResponseEntity.badRequest().body(exception.getMessage());

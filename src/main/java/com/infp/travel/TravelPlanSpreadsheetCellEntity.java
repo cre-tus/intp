@@ -16,6 +16,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -69,10 +70,10 @@ public class TravelPlanSpreadsheetCellEntity {
     private String placeSubtitle;
 
     @Column(precision = 10, scale = 7)
-    private Double latitude;
+    private BigDecimal latitude;
 
     @Column(precision = 10, scale = 7)
-    private Double longitude;
+    private BigDecimal longitude;
 
     @Column(name = "route_role", nullable = false, length = 20)
     private String routeRole = "NONE";

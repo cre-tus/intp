@@ -9,6 +9,8 @@ export default function PlaceSearchModal(props: {
     showFixedOption?: boolean;
     fixedOptionChecked?: boolean;
     onFixedOptionChange?: (checked: boolean) => void;
+    paidPlaces?: boolean;
+    planId?: string;
 }) {
     if (!props.open) return null;
 
@@ -32,6 +34,8 @@ export default function PlaceSearchModal(props: {
                     showFixedOption={props.showFixedOption}
                     fixedOptionChecked={props.fixedOptionChecked}
                     onFixedOptionChange={props.onFixedOptionChange}
+                    paidPlaces={props.paidPlaces}
+                    planId={props.planId}
                     onSelect={(place) => {
                         props.onSelect(place);
                         props.onClose();

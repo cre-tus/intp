@@ -36,6 +36,8 @@ export default function DayCard(props: {
     onClearTimeError: (activityId: string) => void;
     onReorderActivities: (dayId: string, oldIndex: number, newIndex: number) => void;
     dragHandleProps?: DragHandleProps;
+    paidPlaces?: boolean;
+    planId?: string;
 }) {
     const { day, dayIndex } = props;
     const dayCost = day.activities.reduce((sum, activity) => sum + (activity.cost || 0), 0);
@@ -118,6 +120,8 @@ export default function DayCard(props: {
                                 }
                                 onChangeTime={(next) => props.onSetActivityTime(day.id, activity.id, next)}
                                 onClearTimeError={props.onClearTimeError}
+                                paidPlaces={props.paidPlaces}
+                                planId={props.planId}
                             />
                         ))}
                     </SortableContext>

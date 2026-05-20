@@ -24,6 +24,7 @@ export default function PrimaryButton() {
     const [template, setTemplate] = useState<TravelPlanTemplate>("basic");
     const [selectedTier, setSelectedTier] = useState<TravelPlanTier>("FREE");
     const [depositorName, setDepositorName] = useState("");
+    const [depositBank, setDepositBank] = useState("");
     const [accountNumber, setAccountNumber] = useState("");
     const [error, setError] = useState("");
     const [submitting, setSubmitting] = useState(false);
@@ -33,6 +34,7 @@ export default function PrimaryButton() {
         setStep("template");
         setError("");
         setDepositorName("");
+        setDepositBank("");
         setAccountNumber("");
         setSelectedTier("FREE");
         setSubmitting(false);
@@ -72,8 +74,8 @@ export default function PrimaryButton() {
 
     const submitPaidRequest = async () => {
         if (submitting) return;
-        if (!depositorName.trim() || !accountNumber.trim()) {
-            setError("입금자명과 계좌번호를 입력해 주세요.");
+        if (!depositorName.trim() || !depositBank.trim() || !accountNumber.trim()) {
+            setError("입금자명, 은행명, 계좌번호를 입력해 주세요.");
             return;
         }
         setSubmitting(true);
@@ -83,6 +85,7 @@ export default function PrimaryButton() {
                 planId: plan.id,
                 planTitle: plan.title,
                 depositorName: depositorName.trim(),
+                depositBank: depositBank.trim(),
                 depositAccount: accountNumber.trim(),
             });
             close();
@@ -167,6 +170,8 @@ export default function PrimaryButton() {
                                 </div>
                                 <label className="mt-5 block text-sm font-semibold text-gray-700">입금자명</label>
                                 <input value={depositorName} onChange={(event) => setDepositorName(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
+                                <label className="mt-4 block text-sm font-semibold text-gray-700">은행명</label>
+                                <input value={depositBank} onChange={(event) => setDepositBank(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
                                 <label className="mt-4 block text-sm font-semibold text-gray-700">계좌번호</label>
                                 <input value={accountNumber} onChange={(event) => setAccountNumber(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
                                 {error && <ErrorBox message={error} />}

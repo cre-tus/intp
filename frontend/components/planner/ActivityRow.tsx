@@ -28,6 +28,8 @@ export default function ActivityRow(props: {
     onChangeField: (field: keyof ItineraryActivity, value: string | number) => void;
     onClearTimeError: (activityId: string) => void;
     dragHandleProps?: DragHandleProps;
+    paidPlaces?: boolean;
+    planId?: string;
 }) {
     const { activity, index, error } = props;
     const [placeOpen, setPlaceOpen] = useState(false);
@@ -76,6 +78,8 @@ export default function ActivityRow(props: {
                 open={placeOpen}
                 onClose={() => setPlaceOpen(false)}
                 initialQuery={activity.location}
+                paidPlaces={props.paidPlaces}
+                planId={props.planId}
                 onSelect={(place) => {
                     props.onChangeField("location", place.title);
                     props.onChangeField("placeId", place.id);

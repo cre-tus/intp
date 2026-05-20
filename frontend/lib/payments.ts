@@ -10,6 +10,7 @@ export type PaymentRequest = {
     requesterEmail: string;
     requesterNickname?: string | null;
     depositorName: string;
+    depositBank: string;
     depositAccount: string;
     amount: number;
     status: PaymentRequestStatus;
@@ -23,6 +24,7 @@ export async function createPaymentRequest(input: {
     planId: string;
     planTitle: string;
     depositorName: string;
+    depositBank: string;
     depositAccount: string;
 }) {
     const response = await api.post<PaymentRequest>("/api/payments", input);

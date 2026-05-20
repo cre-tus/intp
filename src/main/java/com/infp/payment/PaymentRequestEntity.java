@@ -43,6 +43,9 @@ public class PaymentRequestEntity {
     @Column(name = "depositor_name", nullable = false, length = 100)
     private String depositorName;
 
+    @Column(name = "deposit_bank", nullable = false, length = 100)
+    private String depositBank;
+
     @Column(name = "deposit_account", nullable = false, length = 100)
     private String depositAccount;
 

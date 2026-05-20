@@ -4,6 +4,7 @@ public record CreatePaymentRequest(
         String planId,
         String planTitle,
         String depositorName,
+        String depositBank,
         String depositAccount
 ) {
 }

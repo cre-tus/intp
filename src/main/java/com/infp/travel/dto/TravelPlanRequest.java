@@ -1,6 +1,6 @@
 package com.infp.travel.dto;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 public record TravelPlanRequest(
         String id,

@@ -158,9 +158,13 @@ public class AdminServerTestService {
     }
 
     public ServerTestJobStartResponse startJob(int requestedNodeCount, int requestedUserCount, List<ServerTestUserNodes> requestedUsers) {
+        return startJob(requestedNodeCount, requestedUserCount, null, requestedUsers);
+    }
+
+    public ServerTestJobStartResponse startJob(int requestedNodeCount, int requestedUserCount, String shuffleJobId, List<ServerTestUserNodes> requestedUsers) {
         int nodeCount = normalizeNodeCount(requestedNodeCount);
         int userCount = normalizeUserCount(requestedUserCount);
-        List<ServerTestUserNodes> users = normalizeUsers(requestedUsers, nodeCount, userCount);
+        List<ServerTestUserNodes> users = normalizeUsers(resolveUsers(shuffleJobId, requestedUsers), nodeCount, userCount);
         String jobId = UUID.randomUUID().toString();
         jobs.put(jobId, new ServerTestJobStatusResponse(jobId, "RUNNING", 0, userCount, 0, null, null));
         jobExecutor.submit(() -> runJob(jobId, nodeCount, userCount, users));
@@ -351,6 +355,23 @@ public class AdminServerTestService {
             throw new IllegalArgumentException("셔플된 사용자/노드 수가 입력값과 맞지 않습니다. 노드 셔플을 다시 실행해 주세요.");
         }
         return users;
+    }
+
+    private List<ServerTestUserNodes> resolveUsers(String shuffleJobId, List<ServerTestUserNodes> requestedUsers) {
+        if (requestedUsers != null && !requestedUsers.isEmpty()) {
+            return requestedUsers;
+        }
+        if (shuffleJobId == null || shuffleJobId.isBlank()) {
+            return requestedUsers;
+        }
+        ServerTestShuffleJobStatusResponse shuffleStatus = shuffleJobs.get(shuffleJobId);
+        if (shuffleStatus == null) {
+            throw new IllegalArgumentException("노드 셔플 작업을 찾을 수 없습니다. 다시 셔플해 주세요.");
+        }
+        if (!"COMPLETED".equals(shuffleStatus.status()) || shuffleStatus.result() == null) {
+            throw new IllegalArgumentException("노드 셔플이 아직 완료되지 않았습니다.");
+        }
+        return shuffleStatus.result().users();
     }
 
     private boolean isValidPoint(ServerTestPoint point) {
