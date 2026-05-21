@@ -10,10 +10,10 @@ import Image5 from "@/components/home/MovingRowImage/Image5";
 
 export default function HeroSection() {
     return (
-        <section className="w-full border-t">
-            <div className="mx-auto max-w-[1280px] px-6 py-60">
-                <div className="flex flex-col items-center text-center gap-6">
-                    <h1 className="font-[var(--font-paperlogy)] font-normal text-[64px] leading-[1.05] tracking-[-0.02em] text-black mb-[-0.1px]">
+        <section className="w-full overflow-x-hidden border-t">
+            <div className="mx-auto max-w-[1280px] px-4 py-20 sm:px-6 sm:py-32 lg:py-56">
+                <div className="flex min-w-0 flex-col items-center gap-6 text-center">
+                    <h1 className="max-w-4xl break-keep font-[var(--font-paperlogy)] text-4xl font-normal leading-[1.08] text-black sm:text-5xl lg:text-[64px]">
                         나만의 여행 플래너 지금 만드세요.
                     </h1>
 

@@ -5,12 +5,16 @@ import com.infp.travel.dto.TravelPlanResponse;
 import com.infp.travel.dto.TravelPlanSummaryResponse;
 import com.infp.user.entity.User;
 import com.infp.user.repository.UserRepository;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -34,9 +38,15 @@ public class TravelPlanService {
                 .toList();
     }
 
+    public List<TravelPlanSummaryResponse> listShared(long userId) {
+        return repository.findSharedPlansByUserId(userId).stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
     public TravelPlanResponse get(String externalId, long userId) {
         TravelPlanEntity entity = requirePlan(externalId);
-        requireOwner(entity, userId);
+        requireCanView(entity, userId);
         return toResponse(entity);
     }
 
@@ -52,7 +62,7 @@ public class TravelPlanService {
             entity.setExternalId(externalId);
             entity.setOwner(owner);
         } else {
-            requireOwner(entity, userId);
+            requireCanEdit(entity, owner);
         }
 
         entity.setTitle(requireText(request.title(), "제목이 필요합니다."));
@@ -64,6 +74,7 @@ public class TravelPlanService {
 
         TravelPlanEntity saved = repository.saveAndFlush(entity);
         ensureOwnerMember(saved, userId);
+        syncPlanMembers(saved, content);
         syncSpreadsheetCells(saved, content);
         return toResponse(saved);
     }
@@ -110,6 +121,61 @@ public class TravelPlanService {
         }
     }
 
+    private void requireCanView(TravelPlanEntity entity, long userId) {
+        if (isOwner(entity, userId) || activePlanMemberRole(entity, userId) != null) return;
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        if (contentRoleForEmail(entity, user.getEmail()) != null) return;
+
+        throw new IllegalArgumentException("여행 계획 접근 권한이 없습니다.");
+    }
+
+    private void requireCanEdit(TravelPlanEntity entity, User user) {
+        if (isOwner(entity, user.getId())) return;
+
+        String memberRole = activePlanMemberRole(entity, user.getId());
+        if ("EDITOR".equals(memberRole)) return;
+
+        String contentRole = contentRoleForEmail(entity, user.getEmail());
+        if ("OWNER".equals(contentRole) || "EDITOR".equals(contentRole)) return;
+
+        throw new IllegalArgumentException("여행 계획 수정 권한이 없습니다.");
+    }
+
+    private boolean isOwner(TravelPlanEntity entity, long userId) {
+        return entity.getOwner() != null && entity.getOwner().getId().equals(userId);
+    }
+
+    private String activePlanMemberRole(TravelPlanEntity entity, long userId) {
+        if (entity.getId() == null) return null;
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT role FROM plan_members WHERE plan_id = ? AND user_id = ? AND status = 'ACTIVE'",
+                    String.class,
+                    entity.getId(),
+                    userId
+            );
+        } catch (EmptyResultDataAccessException exception) {
+            return null;
+        }
+    }
+
+    private String contentRoleForEmail(TravelPlanEntity entity, String email) {
+        if (email == null || email.isBlank()) return null;
+        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        JsonNode participants = parseJson(entity.getContentJson()).get("participants");
+        if (participants == null || !participants.isArray()) return null;
+
+        for (JsonNode participant : participants) {
+            String participantEmail = text(participant, "email").trim().toLowerCase(Locale.ROOT);
+            if (normalizedEmail.equals(participantEmail)) {
+                return normalizeRole(text(participant, "role"), "EDITOR");
+            }
+        }
+        return null;
+    }
+
     private void ensureOwnerMember(TravelPlanEntity entity, long userId) {
         jdbcTemplate.update("""
                         INSERT INTO plan_members (plan_id, user_id, role, status)
@@ -119,6 +185,48 @@ public class TravelPlanService {
                 entity.getId(),
                 userId
         );
+    }
+
+    private void syncPlanMembers(TravelPlanEntity entity, JsonNode content) {
+        JsonNode participants = content.get("participants");
+        if (participants == null || !participants.isArray()) return;
+
+        Set<Long> activeParticipantIds = new HashSet<>();
+        for (JsonNode participant : participants) {
+            String email = text(participant, "email").trim().toLowerCase(Locale.ROOT);
+            if (email.isBlank()) continue;
+
+            userRepository.findByEmail(email).ifPresent(user -> {
+                activeParticipantIds.add(user.getId());
+                if (isOwner(entity, user.getId())) return;
+                String role = normalizeRole(text(participant, "role"), "EDITOR");
+                if ("OWNER".equals(role)) role = "EDITOR";
+                jdbcTemplate.update("""
+                                INSERT INTO plan_members (plan_id, user_id, role, status)
+                                VALUES (?, ?, ?, 'ACTIVE')
+                                ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'ACTIVE'
+                                """,
+                        entity.getId(),
+                        user.getId(),
+                        role
+                );
+            });
+        }
+
+        List<Long> currentMemberIds = jdbcTemplate.queryForList(
+                "SELECT user_id FROM plan_members WHERE plan_id = ? AND role <> 'OWNER'",
+                Long.class,
+                entity.getId()
+        );
+        for (Long memberId : currentMemberIds) {
+            if (!activeParticipantIds.contains(memberId)) {
+                jdbcTemplate.update(
+                        "DELETE FROM plan_members WHERE plan_id = ? AND user_id = ? AND role <> 'OWNER'",
+                        entity.getId(),
+                        memberId
+                );
+            }
+        }
     }
 
     private void syncSpreadsheetCells(TravelPlanEntity entity, JsonNode content) {
@@ -143,8 +251,8 @@ public class TravelPlanService {
                                 INSERT INTO plan_spreadsheet_cells (
                                     plan_id, external_day_id, external_activity_id, day_number, row_order,
                                     row_key, row_label, cell_value, cost, place_id, place_subtitle,
-                                    latitude, longitude, route_role
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    latitude, longitude, route_role, created_at, updated_at
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
                                 """,
                         entity.getId(),
                         text(day, "id"),
@@ -283,5 +391,13 @@ public class TravelPlanService {
 
     private static String blankToDefault(String value, String fallback) {
         return value == null || value.trim().isBlank() ? fallback : value.trim();
+    }
+
+    private static String normalizeRole(String value, String fallback) {
+        String role = value == null || value.isBlank()
+                ? fallback
+                : value.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("OWNER", "EDITOR", "VIEWER").contains(role)) return fallback;
+        return role;
     }
 }

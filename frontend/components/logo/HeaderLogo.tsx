@@ -19,7 +19,7 @@ export default function HeaderLogo() {
                     x2="100%"
                     y2="100%"
                 >
-                    <stop offset="0%" stopColor="#111111"/>
+                    <stop offset="0%" stopColor="#111827"/>
                     <stop offset="100%" stopColor="#000000"/>
                 </linearGradient>
             </defs>

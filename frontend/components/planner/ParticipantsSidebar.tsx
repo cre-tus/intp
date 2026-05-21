@@ -64,6 +64,7 @@ export default function ParticipantsSidebar({
             role: "EDITOR",
         };
         setParticipants((prev) => [...prev.filter((item) => item.email !== user.email), participant]);
+        window.setTimeout(() => onSave?.(), 0);
         setNewParticipantEmail("");
         setNotice(`${user.nickname}님을 참여자로 추가했습니다.`);
     };
@@ -79,6 +80,7 @@ export default function ParticipantsSidebar({
             return;
         }
         setParticipants((prev) => prev.filter((participant) => participant.id !== id));
+        window.setTimeout(() => onSave?.(), 0);
     };
 
     const transferOwner = (id: number) => {
@@ -96,6 +98,7 @@ export default function ParticipantsSidebar({
                 return participant;
             })
         );
+        window.setTimeout(() => onSave?.(), 0);
         setNotice(`${target.name}님에게 오너 권한을 넘겼습니다.`);
     };
 

@@ -31,6 +31,11 @@ public class TravelPlanController {
         return ResponseEntity.ok(service.list(requireUser(principal)));
     }
 
+    @GetMapping("/shared")
+    public ResponseEntity<List<TravelPlanSummaryResponse>> shared(@AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal) {
+        return ResponseEntity.ok(service.listShared(requireUser(principal)));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<TravelPlanResponse> get(
             @PathVariable String id,

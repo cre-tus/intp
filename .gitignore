@@ -49,3 +49,17 @@ node_modules/
 db/gtfs/
 nominatim/
 tiles/
+/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/meta.json
+/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/private_key.json
+/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/regr.json
+/certbot/conf/archive/tuk-intp.kro.kr/cert1.pem
+/certbot/conf/archive/tuk-intp.kro.kr/chain1.pem
+/certbot/conf/archive/tuk-intp.kro.kr/fullchain1.pem
+/certbot/conf/archive/tuk-intp.kro.kr/privkey1.pem
+/certbot/conf/live/tuk-intp.kro.kr/cert.pem
+/certbot/conf/live/tuk-intp.kro.kr/chain.pem
+/certbot/conf/live/tuk-intp.kro.kr/fullchain.pem
+/certbot/conf/live/tuk-intp.kro.kr/privkey.pem
+/certbot/conf/live/tuk-intp.kro.kr/README
+/certbot/conf/live/README
+/certbot/conf/renewal/tuk-intp.kro.kr.conf

@@ -34,7 +34,7 @@ export const useAuthStore = create<AuthState>((set) => ({
                 me: res.data,      // 사용자 정보 저장
                 isLoggedIn: true,  // 로그인 확정
             });
-        } catch (err) {
+        } catch {
             set({
                 me: null,
                 isLoggedIn: false,
@@ -46,6 +46,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     logout: async () => {
         try {
             await api.post("/api/auth/logout", {}, { withCredentials: true });
+        } catch {
+            // 로그아웃은 서버 쿠키/토큰 정리가 실패해도 클라이언트 상태를 반드시 비운다.
         } finally {
             set({
                 me: null,

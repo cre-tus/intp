@@ -3,7 +3,7 @@ import SecondaryButton from "@/components/home/Buttons/SecondaryButton";
 
 export default function Buttons() {
     return (
-        <div className="flex items-center justify-center space-x-6">
+        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
             <PrimaryButton/>
             <SecondaryButton/>
         </div>

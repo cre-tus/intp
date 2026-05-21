@@ -102,7 +102,7 @@ export default function PrimaryButton() {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="flex h-[50px] items-center justify-center rounded-[12px] bg-black px-[20px] font-[var(--font-paperlogy)] text-[18px] font-medium text-white"
+                className="flex h-[50px] items-center justify-center rounded-[12px] bg-black px-[20px] font-[var(--font-paperlogy)] text-[18px] font-medium text-white transition hover:bg-gray-900"
             >
                 Create
             </button>

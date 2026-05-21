@@ -3,6 +3,7 @@ import {webpack} from "next/dist/compiled/webpack/webpack";
 
 const nextConfig: NextConfig = {
   /* config options here */
+    allowedDevOrigins: ["tuk-intp.kro.kr", "39.120.123.99"],
     webpack: config =>  {
         config.watchOptions = {
             poll: 1000,

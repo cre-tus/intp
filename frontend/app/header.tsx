@@ -52,6 +52,7 @@ export default function Header() {
                         fontSize: 48,
                         fontWeight: 900,
                         lineHeight: 1,
+                        color: "#000000",
                     }}
                 >
           인팁
