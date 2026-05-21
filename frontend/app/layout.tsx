@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import React from "react";
+import ThemeToggle from "@/components/theme/ThemeToggle";
 
 export const metadata: Metadata = {
     title: "INTP",
@@ -26,9 +27,10 @@ const paperlogy = localFont({
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="ko" className={paperlogy.variable}>
-        <body className={paperlogy.className}>
+        <html lang="ko" className={paperlogy.variable} suppressHydrationWarning>
+        <body className={paperlogy.className} suppressHydrationWarning>
         {children}
+        <ThemeToggle />
         </body>
         </html>
     );

@@ -8,6 +8,7 @@ import { FileSpreadsheet, Plus, Trash2 } from "lucide-react";
 import type { TravelPlanDraft } from "@/lib/travelPlans";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
 import type { PlaceResult } from "@/components/planner/ActivityField/PlaceSerachInput";
+import { createClientId } from "@/lib/ids";
 
 export interface ItineraryActivity {
     id: string;
@@ -116,7 +117,7 @@ export default function TravelItinerary({
     const addDay = () => {
         setDays((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), date: "", dayTitle: `Day ${prev.length + 1}`, activities: [] },
+            { id: createClientId("day"), date: "", dayTitle: `Day ${prev.length + 1}`, activities: [] },
         ]);
     };
 
@@ -135,7 +136,7 @@ export default function TravelItinerary({
 
     const addActivity = (dayId: string) => {
         const newActivity: ItineraryActivity = {
-            id: crypto.randomUUID(),
+            id: createClientId("activity"),
             time: "",
             location: "",
             activity: "",
@@ -256,7 +257,7 @@ export default function TravelItinerary({
             return [
                 ...prev,
                 {
-                    id: crypto.randomUUID(),
+                    id: createClientId("day"),
                     date: "",
                     dayTitle: `Day ${prev.length + 1}`,
                     activities: rowKeys.map((rowKey) => spreadsheetActivity(rowKey)),
@@ -268,7 +269,7 @@ export default function TravelItinerary({
     const addSpreadsheetRow = () => {
         const label = window.prompt("추가할 행 이름을 입력하세요.");
         if (!label?.trim()) return;
-        const rowKey = `__custom__:${crypto.randomUUID()}:${label.trim()}`;
+        const rowKey = `__custom__:${createClientId("row")}:${label.trim()}`;
         setDays((prev) =>
             prev.map((day) => ({
                 ...day,
@@ -688,7 +689,7 @@ function spreadsheetRowKeys(days: ItineraryDay[]) {
 
 function spreadsheetActivity(rowKey: string): ItineraryActivity {
     return {
-        id: crypto.randomUUID(),
+        id: createClientId("activity"),
         time: rowKey,
         location: "",
         activity: "",

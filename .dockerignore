@@ -8,6 +8,7 @@ frontend/.next
 frontend/out
 frontend/build
 nominatim
+certbot
 tiles
 *.log
 *.tmp

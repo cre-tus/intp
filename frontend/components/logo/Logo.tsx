@@ -25,7 +25,7 @@ export default function Logo({
             >
                 <defs>
                     <linearGradient id="infpGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#111111"/>
+                        <stop offset="0%" stopColor="#111827"/>
                         <stop offset="100%" stopColor="#000000"/>
                     </linearGradient>
                 </defs>
@@ -65,7 +65,7 @@ export default function Logo({
                     fontSize: textSize,
                     fontWeight: 700,
                     letterSpacing: '0.2em',
-                    color: 'black',
+                    color: '#000000',
                     lineHeight: 1,
                 }}
             >

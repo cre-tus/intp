@@ -2,6 +2,7 @@ import type { Participant } from "@/components/planner/ParticipantsSidebar";
 import type { ChecklistItem } from "@/components/planner/TravelCheckList";
 import type { ItineraryDay } from "@/components/planner/TravelItinerary";
 import { api } from "@/service/api";
+import { createClientId } from "@/lib/ids";
 
 export type TravelPlanTemplate = "basic" | "spreadsheet";
 export type TravelPlanTier = "FREE" | "PENDING_PAID" | "PAID";
@@ -66,12 +67,12 @@ export function createSpreadsheetTravelPlan(id: string, title = "엑셀형 여�
     const timeRows = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
     const costRows = ["아침", "점심", "저녁", "교통", "기타"];
     plan.days = Array.from({ length: 5 }, (_, dayIndex) => ({
-        id: crypto.randomUUID(),
+        id: createClientId("day"),
         date: "",
         dayTitle: `Day ${dayIndex + 1}`,
         activities: [
             {
-                id: crypto.randomUUID(),
+                id: createClientId("activity"),
                 time: lodgingRow,
                 location: "",
                 activity: "",
@@ -79,7 +80,7 @@ export function createSpreadsheetTravelPlan(id: string, title = "엑셀형 여�
                 routeRole: "LODGING" as const,
             },
             ...timeRows.map((time) => ({
-                id: crypto.randomUUID(),
+                id: createClientId("activity"),
                 time,
                 location: "",
                 activity: "",
@@ -87,7 +88,7 @@ export function createSpreadsheetTravelPlan(id: string, title = "엑셀형 여�
                 routeRole: "NONE" as const,
             })),
             ...costRows.map((label) => ({
-                id: crypto.randomUUID(),
+                id: createClientId("activity"),
                 time: `__cost__:${label}`,
                 location: "",
                 activity: "",
@@ -151,15 +152,17 @@ export async function loadTravelPlanIndex(): Promise<TravelPlanIndexItem[]> {
     return response.data;
 }
 
+export async function loadSharedTravelPlanIndex(): Promise<TravelPlanIndexItem[]> {
+    const response = await api.get<TravelPlanIndexItem[]>("/api/travel-plans/shared");
+    return response.data;
+}
+
 export function travelPlanNodeLimit(plan: Pick<TravelPlanDraft, "tier">) {
     return plan.tier === "PAID" ? 20 : 10;
 }
 
 export function generatePlanId() {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-        return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    return createClientId("plan");
 }
 
 function toPayload(plan: TravelPlanDraft): TravelPlanPayload {

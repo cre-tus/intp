@@ -16,6 +16,7 @@ import {
     travelPlanNodeLimit,
     type TravelPlanDraft,
 } from "@/lib/travelPlans";
+import { createClientId } from "@/lib/ids";
 
 type RealtimeMessage = {
     type: "PLAN_UPDATED";
@@ -26,10 +27,10 @@ type RealtimeMessage = {
     updatedAt?: string;
 };
 
-export default function HeroSection({ createId }: { createId?: string }) {
+export default function HeroSection({ createId, allowCreate = false }: { createId?: string; allowCreate?: boolean }) {
     const { me, isLoggedIn, fetchMe } = useAuthStore();
     const planId = createId ?? "default";
-    const clientIdRef = useRef<string>(crypto.randomUUID());
+    const clientIdRef = useRef<string>(createClientId("client"));
     const socketRef = useRef<WebSocket | null>(null);
     const applyingRemoteRef = useRef(false);
     const pendingBroadcastRef = useRef(false);
@@ -49,6 +50,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
     const [lastSavedAt, setLastSavedAt] = useState(initialPlan.updatedAt);
     const [lastEditorName, setLastEditorName] = useState("사용자");
     const [lastEditorEmail, setLastEditorEmail] = useState("");
+    const [missingPlan, setMissingPlan] = useState(false);
 
     useEffect(() => {
         void fetchMe();
@@ -57,9 +59,14 @@ export default function HeroSection({ createId }: { createId?: string }) {
     useEffect(() => {
         let cancelled = false;
         setPlanLoading(true);
+        setMissingPlan(false);
         loadTravelPlan(planId)
             .then((loaded) => {
                 if (cancelled) return;
+                if (!loaded && !allowCreate) {
+                    setMissingPlan(true);
+                    return;
+                }
                 const next = loaded ?? createEmptyTravelPlan(planId);
                 setInitialPlan(next);
                 setTitle(next.title);
@@ -69,7 +76,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
                 setRouteDayId(next.days[0]?.id ?? "");
                 setLastSavedAt(next.updatedAt);
                 dirtyRef.current = !loaded;
-                if (!loaded) void saveTravelPlan(next);
+                if (!loaded) void saveTravelPlan(next).catch(() => setSyncStatus("저장 실패"));
             })
             .finally(() => {
                 if (!cancelled) setPlanLoading(false);
@@ -77,7 +84,7 @@ export default function HeroSection({ createId }: { createId?: string }) {
         return () => {
             cancelled = true;
         };
-    }, [planId]);
+    }, [allowCreate, planId]);
 
     const currentEditorName = me?.nickname || me?.email?.split("@")[0] || "사용자";
     const currentEditorEmail = me?.email ?? "";
@@ -224,7 +231,14 @@ export default function HeroSection({ createId }: { createId?: string }) {
     const saveCurrentPlan = useCallback(async (broadcast = true, planOverride?: TravelPlanDraft) => {
         const source = planOverride ?? draft;
         const saved = { ...source, updatedAt: new Date().toISOString() };
-        const persisted = await saveTravelPlan(saved);
+        let persisted: TravelPlanDraft;
+        try {
+            persisted = await saveTravelPlan(saved);
+        } catch {
+            dirtyRef.current = true;
+            setSyncStatus("저장 실패");
+            return;
+        }
         dirtyRef.current = false;
         setInitialPlan(persisted);
         setLastSavedAt(persisted.updatedAt);
@@ -336,12 +350,27 @@ export default function HeroSection({ createId }: { createId?: string }) {
         ? `마지막 수정자: ${lastEditorName} (${lastEditorEmail})`
         : `마지막 수정자: ${lastEditorName}`;
 
-    if (!accessStatusReady || planLoading) {
+    if (!missingPlan && (!accessStatusReady || planLoading)) {
         return (
             <div className="min-h-screen bg-gray-50">
                 <div className="container mx-auto px-4 py-16">
                     <div className="rounded-xl border border-gray-200 bg-white p-8 text-gray-700 shadow-sm">
                         초대 권한을 확인하는 중입니다.
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (missingPlan) {
+        return (
+            <div className="min-h-screen bg-gray-50">
+                <div className="mx-auto max-w-xl px-4 py-16">
+                    <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+                        <h1 className="text-2xl font-bold text-gray-950">존재하지 않는 여행 계획표입니다.</h1>
+                        <p className="mt-3 text-sm leading-6 text-gray-600">
+                            입력한 계획 ID가 DB에 없거나 접근 권한이 없습니다. 초대 링크를 다시 확인해주세요.
+                        </p>
                     </div>
                 </div>
             </div>
