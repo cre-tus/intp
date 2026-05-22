@@ -95,13 +95,13 @@ export default function TravelCheckList({
     );
 
     return (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-y-hidden">
+        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
 
             {/* ===============================
                 헤더
             =============================== */}
-            <div className="bg-gradient-to-r from-gray-700 to-gray-900 px-6 py-4">
-                <h2 className="font-[var(--font-paperlogy)] font-bold text-2xl text-white">
+            <div className="bg-gradient-to-r from-gray-700 to-gray-900 px-4 py-4 sm:px-6">
+                <h2 className="font-[var(--font-paperlogy)] text-xl font-bold text-white sm:text-2xl">
                     여행 전 준비물
                 </h2>
             </div>
@@ -109,11 +109,11 @@ export default function TravelCheckList({
             {/* ===============================
                 리스트 영역
             =============================== */}
-            <div className="p-6 space-y-3">
+            <div className="space-y-3 p-4 sm:p-6">
 
                 {/* 각 체크리스트 항목 */}
                 {checklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 group">
+                    <div key={item.id} className="group grid gap-2 rounded-lg border border-gray-100 p-2 sm:flex sm:items-center sm:border-0 sm:p-0">
 
                         {/* 체크 버튼 */}
                         <button
@@ -135,7 +135,7 @@ export default function TravelCheckList({
                                 updateChecklistItem(item.id, e.target.value)
                             }
                             placeholder="항목 입력"
-                            className={`flex-1 px-3 py-2 border rounded ${
+                            className={`min-w-0 flex-1 rounded border px-3 py-2 ${
                                 item.checked ? "line-through text-gray-400" : ""
                             }`}
                         />
@@ -148,14 +148,14 @@ export default function TravelCheckList({
                             value={item.cost ? item.cost.toLocaleString() : ""}
                             onChange={(e) => updateChecklistItemCostInput(item.id, e.target.value)}
                             placeholder="경비"
-                            className="w-32 px-3 py-2 border rounded"
+                            className="w-full rounded border px-3 py-2 sm:w-32"
                         />
 
                         {/* 삭제 버튼 */}
                         <button
                             type="button"
                             onClick={() => removeChecklistItem(item.id)}
-                            className="p-2 opacity-0 group-hover:opacity-100"
+                            className="justify-self-end rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
                         >
                             <Trash2 className="w-4 h-4 text-gray-700" />
                         </button>
@@ -172,7 +172,7 @@ export default function TravelCheckList({
                 {/* ===============================
                     총 비용 표시
                 =============================== */}
-                <div className="text-right">
+                <div className="text-right text-sm font-semibold sm:text-base">
                     총 경비: {totalCost.toLocaleString()}원
                 </div>
             </div>

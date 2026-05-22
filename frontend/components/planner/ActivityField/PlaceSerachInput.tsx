@@ -123,11 +123,11 @@ export default function PlaceSearchInput(props: {
     const normalizedQuery = q.trim();
     const googleEnabled = Boolean(props.paidPlaces && props.planId);
     const googleMapEnabled = Boolean(props.paidPlaces && props.planId);
-    const canGoogleSearch = googleEnabled && normalizedQuery.length >= 3;
+    const canGoogleSearch = googleEnabled && normalizedQuery.length >= 2;
 
     const runSearch = useCallback(async (nextProvider: SearchProvider = provider) => {
         const query = q.trim();
-        if (!query || (nextProvider === "google" && query.length < 3)) {
+        if (!query || (nextProvider === "google" && query.length < 2)) {
             setItems([]);
             return;
         }
@@ -295,8 +295,8 @@ export default function PlaceSearchInput(props: {
     };
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
-            <div>
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+            <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                         <Search className="h-4 w-4 flex-shrink-0 text-gray-500" />
@@ -399,7 +399,7 @@ export default function PlaceSearchInput(props: {
                     </button>
                 </div>
 
-                <div className="mt-3 max-h-[320px] overflow-auto rounded-lg border border-gray-200">
+                <div className="mt-3 max-h-[220px] overflow-auto rounded-lg border border-gray-200 sm:max-h-[320px]">
                     {loading ? (
                         <div className="p-4 text-sm text-gray-500">검색 중...</div>
                     ) : error ? (
@@ -431,8 +431,8 @@ export default function PlaceSearchInput(props: {
                 </div>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-gray-200">
-                <div ref={mapElementRef} className="h-[500px] min-h-[500px] bg-gray-100" />
+            <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200">
+                <div ref={mapElementRef} className="h-[260px] min-h-[260px] bg-gray-100 sm:h-[420px] sm:min-h-[420px] lg:h-[500px] lg:min-h-[500px]" />
                 <div className="border-t border-gray-200 px-3 py-2 text-xs text-gray-500">
                     {mapError || "검색 결과를 선택하거나 지도에서 위치를 클릭하세요."}
                 </div>

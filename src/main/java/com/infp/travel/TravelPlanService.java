@@ -33,6 +33,7 @@ public class TravelPlanService {
     }
 
     public List<TravelPlanSummaryResponse> list(long userId) {
+        cleanupOwnedPlansWithoutActiveMembers(userId);
         return repository.findAllByOwnerIdOrderByUpdatedAtDesc(userId).stream()
                 .map(this::toSummary)
                 .toList();
@@ -83,7 +84,35 @@ public class TravelPlanService {
     public void delete(String externalId, long userId) {
         TravelPlanEntity entity = requirePlan(externalId);
         requireOwner(entity, userId);
-        repository.delete(entity);
+        deletePlanRows(entity.getId(), externalId);
+    }
+
+    private void cleanupOwnedPlansWithoutActiveMembers(long userId) {
+        List<TravelPlanEntity> orphanPlans = repository.findAllByOwnerIdOrderByUpdatedAtDesc(userId).stream()
+                .filter(plan -> participantCount(plan) == 0)
+                .toList();
+
+        for (TravelPlanEntity plan : orphanPlans) {
+            deletePlanRows(plan.getId(), plan.getExternalId());
+        }
+    }
+
+    private void deletePlanRows(Long planId, String externalId) {
+        if (planId == null) return;
+        jdbcTemplate.update("DELETE FROM payment_requests WHERE plan_id = ?", externalId);
+        jdbcTemplate.update("DELETE FROM plan_spreadsheet_cells WHERE plan_id = ?", planId);
+        jdbcTemplate.update("""
+                        DELETE FROM plan_items
+                        WHERE plan_day_id IN (
+                            SELECT id FROM plan_days WHERE plan_id = ?
+                        )
+                        """,
+                planId
+        );
+        jdbcTemplate.update("DELETE FROM plan_days WHERE plan_id = ?", planId);
+        jdbcTemplate.update("DELETE FROM plan_checklist_items WHERE plan_id = ?", planId);
+        jdbcTemplate.update("DELETE FROM plan_members WHERE plan_id = ?", planId);
+        jdbcTemplate.update("DELETE FROM plans WHERE id = ?", planId);
     }
 
     @Transactional

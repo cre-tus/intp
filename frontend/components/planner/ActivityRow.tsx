@@ -35,7 +35,7 @@ export default function ActivityRow(props: {
     const [placeOpen, setPlaceOpen] = useState(false);
 
     return (
-        <div className="group grid gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md sm:grid-cols-[auto_auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_auto] sm:items-center">
+        <div className="group grid min-w-0 gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md sm:grid-cols-[auto_minmax(0,130px)_minmax(0,1fr)_minmax(0,140px)_minmax(0,1fr)_minmax(0,120px)_auto] sm:items-center">
             <div
                 ref={(el) => props.dragHandleProps?.setActivatorNodeRef?.(el)}
                 {...(props.dragHandleProps?.attributes ?? {})}
@@ -58,12 +58,12 @@ export default function ActivityRow(props: {
 
             <LocationField value={activity.location} onOpen={() => setPlaceOpen(true)} />
 
-            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                 <Pin className="h-4 w-4 flex-shrink-0 text-gray-600" />
                 <select
                     value={activity.routeRole ?? "NONE"}
                     onChange={(event) => props.onChangeField("routeRole", event.target.value)}
-                    className="bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
+                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
                     title="경로 고정"
                 >
                     <option value="NONE">일반</option>

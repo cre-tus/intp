@@ -600,7 +600,7 @@ function SpreadsheetTemplate({
                                         <button
                                             type="button"
                                             onClick={() => onRemoveDay(day.id)}
-                                            className="rounded p-1 text-red-500 opacity-0 transition hover:bg-red-50 group-hover:opacity-100"
+                                            className="rounded p-1 text-red-500 transition hover:bg-red-50 sm:opacity-0 sm:group-hover:opacity-100"
                                             aria-label={`${index + 1}일차 삭제`}
                                         >
                                             <Trash2 className="h-3.5 w-3.5" />
@@ -621,7 +621,7 @@ function SpreadsheetTemplate({
                                             <button
                                                 type="button"
                                                 onClick={() => onRemoveRow(rowKey)}
-                                                className="rounded p-1 text-red-500 opacity-0 transition hover:bg-red-50 group-hover:opacity-100"
+                                                className="rounded p-1 text-red-500 transition hover:bg-red-50 sm:opacity-0 sm:group-hover:opacity-100"
                                                 aria-label={`${spreadsheetRowLabel(rowKey)} 행 삭제`}
                                             >
                                                 <Trash2 className="h-3.5 w-3.5" />

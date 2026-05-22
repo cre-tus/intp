@@ -10,7 +10,7 @@ export default function CostField(props: {
     };
 
     return (
-        <div className="w-[120px] rounded-lg border-2 border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2">
+        <div className="w-full rounded-lg border-2 border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2 sm:w-[120px]">
             <input
                 type="text"
                 inputMode="numeric"

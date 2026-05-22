@@ -44,9 +44,14 @@ export default function MyPage() {
 
     const removePlan = async (plan: TravelPlanIndexItem) => {
         if (!window.confirm(`"${plan.title}" 계획표를 삭제할까요?`)) return;
-        await deleteTravelPlan(plan.id);
-        setPlans(await loadTravelPlanIndex());
-        setSharedPlans(await loadSharedTravelPlanIndex());
+        try {
+            await deleteTravelPlan(plan.id);
+        } catch (error) {
+            window.alert(readDeleteError(error));
+        } finally {
+            setPlans(await loadTravelPlanIndex());
+            setSharedPlans(await loadSharedTravelPlanIndex());
+        }
     };
 
     return (
@@ -120,6 +125,14 @@ function useSortedPlans(plans: TravelPlanIndexItem[]) {
         () => [...plans].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
         [plans],
     );
+}
+
+function readDeleteError(error: unknown) {
+    if (typeof error === "object" && error !== null && "response" in error) {
+        const response = (error as { response?: { data?: unknown } }).response;
+        if (typeof response?.data === "string" && response.data.trim()) return response.data;
+    }
+    return "계획표를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.";
 }
 
 function PlanSection({
