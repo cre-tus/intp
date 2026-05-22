@@ -83,16 +83,13 @@ public class AdminServerTestService {
     }
 
     private ServerTestShuffleResponse buildShuffle(int nodeCount, int userCount, String jobId, AtomicInteger completedUsers) {
-        List<ServerTestPoint> lodgingSeed = toServerTestPoints(gtfsTransitService.randomStops(nodeCount));
-        ServerTestPoint lodging = lodgingSeed.get(0);
         int poolSize = Math.min(Math.max(nodeCount * Math.min(userCount, 500), nodeCount * 8), 10000);
         List<ServerTestPoint> pointPool = toServerTestPoints(gtfsTransitService.randomStopPool(poolSize));
-        int reusableCount = Math.max(1, nodeCount / 3);
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(userCount, 32));
         try {
             List<CompletableFuture<ServerTestUserNodes>> futures = IntStream.rangeClosed(1, userCount)
                     .mapToObj(userIndex -> CompletableFuture
-                            .supplyAsync(() -> buildUserShuffle(userIndex, lodging, lodgingSeed, pointPool, nodeCount, reusableCount), executor)
+                            .supplyAsync(() -> buildUserShuffle(userIndex, pointPool, nodeCount), executor)
                             .thenApply(userNodes -> {
                                 if (jobId != null && completedUsers != null) {
                                     int completed = completedUsers.incrementAndGet();
@@ -114,26 +111,18 @@ public class AdminServerTestService {
 
     private ServerTestUserNodes buildUserShuffle(
             int userIndex,
-            ServerTestPoint lodging,
-            List<ServerTestPoint> lodgingSeed,
             List<ServerTestPoint> pointPool,
-            int nodeCount,
-            int reusableCount
+            int nodeCount
     ) {
-        if (userIndex == 1) {
-            return new ServerTestUserNodes(userIndex, lodgingSeed);
-        }
         List<ServerTestPoint> points = new ArrayList<>();
         Set<String> used = new HashSet<>();
-        addPoint(points, used, lodging);
-        for (ServerTestPoint point : lodgingSeed) {
-            if (points.size() >= reusableCount + 1 || points.size() >= nodeCount) break;
-            addPoint(points, used, point);
-        }
-        int start = Math.floorMod(userIndex * Math.max(1, nodeCount - reusableCount), Math.max(1, pointPool.size()));
+
+        int poolSize = Math.max(1, pointPool.size());
+        int start = Math.floorMod(userIndex * 7919, poolSize);
+        int step = Math.max(1, Math.floorMod(userIndex * 37 + 11, poolSize));
         int cursor = 0;
         while (points.size() < nodeCount && cursor < pointPool.size() * 2) {
-            addPoint(points, used, pointPool.get((start + cursor) % pointPool.size()));
+            addPoint(points, used, pointPool.get((start + cursor * step) % poolSize));
             cursor++;
         }
         while (points.size() < nodeCount) {
