@@ -5,6 +5,7 @@ import com.infp.payment.dto.PaymentRequestResponse;
 import com.infp.travel.TravelPlanService;
 import com.infp.user.entity.User;
 import com.infp.user.repository.UserRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,11 +19,13 @@ public class PaymentRequestService {
     private final PaymentRequestRepository repository;
     private final UserRepository userRepository;
     private final TravelPlanService travelPlanService;
+    private final JdbcTemplate jdbcTemplate;
 
-    public PaymentRequestService(PaymentRequestRepository repository, UserRepository userRepository, TravelPlanService travelPlanService) {
+    public PaymentRequestService(PaymentRequestRepository repository, UserRepository userRepository, TravelPlanService travelPlanService, JdbcTemplate jdbcTemplate) {
         this.repository = repository;
         this.userRepository = userRepository;
         this.travelPlanService = travelPlanService;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional
@@ -69,11 +72,22 @@ public class PaymentRequestService {
         }
         User admin = userRepository.findById(adminUserId)
                 .orElseThrow(() -> new IllegalArgumentException("관리자를 찾을 수 없습니다."));
+        jdbcTemplate.update("""
+                        UPDATE payment_requests
+                        SET status = 'APPROVED',
+                            approved_at = CURRENT_TIMESTAMP(6),
+                            approved_by_user_id = ?,
+                            updated_at = CURRENT_TIMESTAMP(6)
+                        WHERE id = ?
+                        """,
+                admin.getId(),
+                id
+        );
         entity.setStatus(PaymentStatus.APPROVED);
         entity.setApprovedAt(LocalDateTime.now());
         entity.setApprovedBy(admin);
         travelPlanService.updateTier(entity.getPlanId(), "PAID");
-        return toResponse(repository.save(entity));
+        return toResponse(entity);
     }
 
     private PaymentRequestResponse toResponse(PaymentRequestEntity entity) {

@@ -37,9 +37,9 @@ public class GooglePlaceSearchService {
 
     public Mono<List<PlaceItem>> search(String query) {
         String normalized = normalize(query);
-        if (normalized.length() < 3) return Mono.just(List.of());
+        if (normalized.length() < 2) return Mono.just(List.of());
         if (apiKey.isBlank()) {
-            return Mono.error(new IllegalStateException("Google 지도 API 키가 설정되지 않았습니다."));
+            return Mono.error(new IllegalStateException("Google 吏??API ?ㅺ? ?ㅼ젙?섏? ?딆븯?듬땲??"));
         }
 
         String cacheKey = "place:google:text:v1:" + normalized;
@@ -66,7 +66,8 @@ public class GooglePlaceSearchService {
     private List<PlaceItem> toPlaceItems(Map<String, Object> body, String sourceQuery) {
         Object status = body.get("status");
         if (status != null && !"OK".equals(status) && !"ZERO_RESULTS".equals(status)) {
-            throw new IllegalStateException("Google 장소 검색을 사용할 수 없습니다: " + status);
+            String message = stringValue(body.get("error_message"));
+            throw new IllegalStateException("Google 장소 검색을 사용할 수 없습니다: " + status + (message.isBlank() ? "" : " - " + message));
         }
 
         Object resultsValue = body.get("results");

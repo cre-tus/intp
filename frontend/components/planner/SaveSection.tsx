@@ -22,11 +22,11 @@ export function SaveSection({ defaultUserName = "사용자", onSave }: SaveSecti
     };
 
     return (
-        <div className="space-y-3 border-t-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white p-5">
+        <div className="space-y-3 border-t-2 border-gray-200 bg-gradient-to-r from-gray-50 to-white p-4 sm:p-5">
             <button
                 type="button"
                 onClick={handleSave}
-                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-lg bg-gradient-to-r from-black via-gray-900 to-black px-4 py-3 font-bold text-white transition-all hover:scale-105 hover:shadow-lg"
+                className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-lg bg-gradient-to-r from-black via-gray-900 to-black px-4 py-3 font-bold text-white transition-all hover:shadow-lg sm:hover:scale-105"
             >
                 <div className="absolute inset-0 translate-x-[-100%] bg-gradient-to-r from-transparent via-white/10 to-transparent transition-transform duration-700 group-hover:translate-x-[100%]" />
                 <Save className="relative z-10 h-5 w-5" />
@@ -35,13 +35,13 @@ export function SaveSection({ defaultUserName = "사용자", onSave }: SaveSecti
 
             {lastSaved && (
                 <div className="space-y-1.5 rounded-lg border-2 border-gray-200 bg-white p-3">
-                    <div className="flex items-start gap-2">
-                        <span className="min-w-[60px] text-xs font-semibold text-gray-500">저장 일시:</span>
-                        <span className="text-xs font-medium text-gray-700">{lastSaved.date}</span>
+                    <div className="flex min-w-0 items-start gap-2">
+                        <span className="shrink-0 text-xs font-semibold text-gray-500">저장 일시:</span>
+                        <span className="min-w-0 break-words text-xs font-medium text-gray-700">{lastSaved.date}</span>
                     </div>
-                    <div className="flex items-start gap-2">
-                        <span className="min-w-[60px] text-xs font-semibold text-gray-500">저장자:</span>
-                        <span className="text-xs font-medium text-gray-700">{lastSaved.user}</span>
+                    <div className="flex min-w-0 items-start gap-2">
+                        <span className="shrink-0 text-xs font-semibold text-gray-500">저장자:</span>
+                        <span className="min-w-0 break-words text-xs font-medium text-gray-700">{lastSaved.user}</span>
                     </div>
                 </div>
             )}

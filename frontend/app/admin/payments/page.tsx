@@ -18,8 +18,8 @@ export default function AdminPaymentsPage() {
         setError("");
         try {
             setRequests(await loadPaymentRequests());
-        } catch {
-            setError("결제 요청 목록을 불러오지 못했습니다.");
+        } catch (error) {
+            setError(readPaymentError(error, "결제 요청 목록을 불러오지 못했습니다."));
         } finally {
             setLoading(false);
         }
@@ -39,12 +39,13 @@ export default function AdminPaymentsPage() {
     );
 
     const approve = async (id: number) => {
-        if (!window.confirm("입금 확인 완료 처리하고 해당 템플릿 ID를 유료 버전으로 승격할까요?")) return;
+        if (!window.confirm("입금 확인 완료 처리하고 해당 템플릿 ID를 유료 버전으로 변경할까요?")) return;
         try {
             await approvePaymentRequest(id);
             await refresh();
-        } catch {
-            setError("결제 승인 처리에 실패했습니다.");
+        } catch (error) {
+            await refresh();
+            setError(readPaymentError(error, "결제 승인 처리에 실패했습니다."));
         }
     };
 
@@ -70,7 +71,7 @@ export default function AdminPaymentsPage() {
                     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-950">결제 관리하기</h1>
-                            <p className="mt-2 text-sm text-gray-500">입금 확인 후 템플릿 ID별 유료 버전 승격을 처리합니다.</p>
+                            <p className="mt-2 text-sm text-gray-500">입금 확인 후 템플릿 ID별 유료 버전 적용을 처리합니다.</p>
                         </div>
                         <Link href="/admin/server-test" className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50">
                             서버 테스트
@@ -95,49 +96,47 @@ export default function AdminPaymentsPage() {
                                     <tr>
                                         <Th>상태</Th>
                                         <Th>템플릿</Th>
-                                        <Th>신청자</Th>
-                                        <Th>입금주명</Th>
+                                        <Th>요청자</Th>
+                                        <Th>입금자명</Th>
                                         <Th>은행명</Th>
                                         <Th>입금계좌</Th>
                                         <Th align="right">금액</Th>
-                                        <Th>신청일시</Th>
+                                        <Th>요청일시</Th>
                                         <Th>승인일시</Th>
                                         <Th>관리</Th>
                                     </tr>
                                     </thead>
                                     <tbody>
-                                    {sorted.map((request) => {
-                                        return (
-                                            <tr key={request.id}>
-                                                <Td><StatusBadge status={request.status} /></Td>
-                                                <Td>
-                                                    <div className="font-bold text-gray-950">{request.planTitle}</div>
-                                                    <div className="mt-1 text-xs text-gray-500">{request.planId}</div>
-                                                    <div className="mt-1 text-xs text-gray-400">템플릿 ID별로 승인 상태가 적용됩니다.</div>
-                                                </Td>
-                                                <Td>
-                                                    <div>{request.requesterNickname || request.requesterEmail}</div>
-                                                    <div className="mt-1 text-xs text-gray-500">{request.requesterEmail}</div>
-                                                </Td>
-                                                <Td>{request.depositorName}</Td>
-                                                <Td>{request.depositBank}</Td>
-                                                <Td>{request.depositAccount}</Td>
-                                                <Td align="right">{request.amount.toLocaleString()}원</Td>
-                                                <Td>{new Date(request.createdAt).toLocaleString("ko-KR")}</Td>
-                                                <Td>{request.approvedAt ? new Date(request.approvedAt).toLocaleString("ko-KR") : "-"}</Td>
-                                                <Td>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => void approve(request.id)}
-                                                        disabled={request.status === "APPROVED"}
-                                                        className="rounded-lg bg-gray-950 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
-                                                    >
-                                                        결제 확인 완료
-                                                    </button>
-                                                </Td>
-                                            </tr>
-                                        );
-                                    })}
+                                    {sorted.map((request) => (
+                                        <tr key={request.id}>
+                                            <Td><StatusBadge status={request.status} /></Td>
+                                            <Td>
+                                                <div className="font-bold text-gray-950">{request.planTitle}</div>
+                                                <div className="mt-1 text-xs text-gray-500">{request.planId}</div>
+                                                <div className="mt-1 text-xs text-gray-400">템플릿 ID별로 승인 상태가 적용됩니다.</div>
+                                            </Td>
+                                            <Td>
+                                                <div>{request.requesterNickname || request.requesterEmail}</div>
+                                                <div className="mt-1 text-xs text-gray-500">{request.requesterEmail}</div>
+                                            </Td>
+                                            <Td>{request.depositorName}</Td>
+                                            <Td>{request.depositBank}</Td>
+                                            <Td>{request.depositAccount}</Td>
+                                            <Td align="right">{request.amount.toLocaleString()}원</Td>
+                                            <Td>{new Date(request.createdAt).toLocaleString("ko-KR")}</Td>
+                                            <Td>{request.approvedAt ? new Date(request.approvedAt).toLocaleString("ko-KR") : "-"}</Td>
+                                            <Td>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void approve(request.id)}
+                                                    disabled={request.status === "APPROVED"}
+                                                    className="rounded-lg bg-gray-950 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-300"
+                                                >
+                                                    결제 확인 완료
+                                                </button>
+                                            </Td>
+                                        </tr>
+                                    ))}
                                     </tbody>
                                 </table>
                             </div>
@@ -161,4 +160,13 @@ function StatusBadge({ status }: { status: PaymentRequest["status"] }) {
     return status === "APPROVED"
         ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">승인 완료</span>
         : <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">대기</span>;
+}
+
+function readPaymentError(error: unknown, fallback: string) {
+    if (typeof error === "object" && error !== null && "response" in error) {
+        const response = (error as { response?: { data?: unknown; status?: number } }).response;
+        if (typeof response?.data === "string" && response.data.trim()) return response.data;
+        if (response?.status) return `${fallback} (HTTP ${response.status})`;
+    }
+    return fallback;
 }

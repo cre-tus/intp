@@ -149,7 +149,7 @@ export default function ParticipantsSidebar({
                 </div>
 
                 <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="grid gap-2 sm:flex sm:items-center">
                         <input
                             type="email"
                             value={newParticipantEmail}
@@ -204,7 +204,7 @@ export default function ParticipantsSidebar({
                                     <button
                                         type="button"
                                         onClick={() => transferOwner(participant.id)}
-                                        className="shrink-0 rounded-lg p-1.5 opacity-0 transition-all hover:scale-110 hover:bg-amber-50 group-hover:opacity-100"
+                                        className="shrink-0 rounded-lg p-1.5 transition-all hover:scale-110 hover:bg-amber-50 sm:opacity-0 sm:group-hover:opacity-100"
                                         title="오너 넘기기"
                                     >
                                         <UserCog className="h-4 w-4 text-amber-600" />
@@ -215,7 +215,7 @@ export default function ParticipantsSidebar({
                                     type="button"
                                     onClick={() => removeParticipant(participant.id)}
                                     disabled={!isOwner || participant.role === "OWNER"}
-                                    className="shrink-0 rounded-lg p-1.5 opacity-0 transition-all hover:scale-110 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-20 group-hover:opacity-100"
+                                    className="shrink-0 rounded-lg p-1.5 transition-all hover:scale-110 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-20 sm:opacity-0 sm:group-hover:opacity-100"
                                     title={participant.role === "OWNER" ? "오너는 권한을 넘긴 뒤 삭제할 수 있습니다." : "참여자 삭제"}
                                 >
                                     <Trash2 className="h-4 w-4 text-red-600" />

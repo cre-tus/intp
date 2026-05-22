@@ -30,7 +30,7 @@ export default function DayCard(props: {
         dayId: string,
         activityId: string,
         field: keyof ItineraryActivity,
-        value: string | number
+        value: string | number,
     ) => void;
     onSetActivityTime: (dayId: string, activityId: string, nextTime: string) => void;
     onClearTimeError: (activityId: string) => void;
@@ -53,8 +53,8 @@ export default function DayCard(props: {
     };
 
     return (
-        <div className="overflow-hidden rounded-xl border-2 border-gray-200 bg-white shadow-md transition-all duration-300 hover:border-gray-300 hover:shadow-xl">
-            <div className="group relative flex flex-wrap items-center gap-3 overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 px-4 py-4 sm:px-5">
+        <div className="min-w-0 overflow-hidden rounded-xl border-2 border-gray-200 bg-white shadow-md transition-all duration-300 hover:border-gray-300 hover:shadow-xl">
+            <div className="group relative grid min-w-0 gap-3 overflow-hidden bg-gradient-to-r from-gray-900 to-gray-800 px-4 py-4 sm:grid-cols-[auto_minmax(0,180px)_minmax(0,1fr)_auto] sm:items-center sm:px-5">
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
                 <button
@@ -62,7 +62,7 @@ export default function DayCard(props: {
                     ref={(el) => props.dragHandleProps?.setActivatorNodeRef?.(el)}
                     {...(props.dragHandleProps?.attributes ?? {})}
                     {...(props.dragHandleProps?.listeners ?? {})}
-                    className="z-10 cursor-grab rounded-lg p-2 hover:bg-white/20 active:cursor-grabbing"
+                    className="z-10 w-fit cursor-grab rounded-lg p-2 hover:bg-white/20 active:cursor-grabbing"
                     aria-label="일정 순서 변경"
                 >
                     <GripVertical className="h-5 w-5 text-white" />
@@ -72,14 +72,15 @@ export default function DayCard(props: {
                     type="text"
                     value={day.dayTitle}
                     onChange={(event) => props.onUpdateDayTitle(day.id, event.target.value)}
-                    className="z-10 min-w-0 flex-1 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50 sm:w-32 sm:flex-shrink-0 sm:flex-none"
+                    className="z-10 min-w-0 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
                 />
 
-                <div className="z-10 flex min-w-[180px] flex-1 items-center gap-2">
+                <div className="z-10 flex min-w-0 items-center gap-2">
                     <button
                         onClick={() => props.onFocusDate(day.id)}
                         className="flex-shrink-0 rounded-lg p-2 transition-all hover:scale-110 hover:bg-white/20"
                         type="button"
+                        aria-label="날짜 선택"
                     >
                         <Calendar className="h-4 w-4 cursor-pointer text-white" />
                     </button>
@@ -89,16 +90,17 @@ export default function DayCard(props: {
                         type="date"
                         value={day.date}
                         onChange={(event) => props.onUpdateDayDate(day.id, event.target.value)}
-                        className="no-date-picker bg-transparent text-white placeholder-white/60 focus:outline-none"
+                        className="no-date-picker min-w-0 flex-1 bg-transparent text-white placeholder-white/60 focus:outline-none"
                     />
                 </div>
 
                 <button
                     onClick={() => props.onRemoveDay(day.id)}
-                    className="z-10 flex-shrink-0 rounded-lg p-2 opacity-0 transition-all hover:scale-110 hover:bg-red-500/20 group-hover:opacity-100"
+                    className="z-10 w-fit rounded-lg p-2 text-white transition-all hover:scale-110 hover:bg-red-500/20 sm:justify-self-end sm:opacity-0 sm:group-hover:opacity-100"
                     type="button"
+                    aria-label="일정 삭제"
                 >
-                    <Trash2 className="h-5 w-5 text-white" />
+                    <Trash2 className="h-5 w-5" />
                 </button>
             </div>
 
@@ -137,7 +139,7 @@ export default function DayCard(props: {
                 </button>
 
                 {day.activities.length > 0 && (
-                    <div className="-mx-5 mt-3 border-t-2 border-gray-200 bg-gradient-to-r from-transparent to-gray-100 px-5 py-3 text-right">
+                    <div className="-mx-3 mt-3 border-t-2 border-gray-200 bg-gradient-to-r from-transparent to-gray-100 px-3 py-3 text-right sm:-mx-5 sm:px-5">
                         <span className="text-sm font-medium text-gray-600">Day {dayIndex + 1} 총 경비:</span>
                         <span className="ml-2 text-xl font-bold text-gray-900">{dayCost.toLocaleString()}</span>
                         <span className="ml-1 text-sm text-gray-600">원</span>

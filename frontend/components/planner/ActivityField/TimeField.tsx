@@ -20,13 +20,13 @@ export default function TimeField(props: {
 
     return (
         <div
-            className="group/time relative flex items-center gap-1 w-[130px] bg-gray-50 rounded-lg px-2 py-1 border border-gray-200"
+            className="group/time relative flex w-full items-center gap-1 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 sm:w-[130px]"
             onMouseEnter={() => props.onClearError?.()}
             onFocusCapture={() => props.onClearError?.()}
         >
 
             <Clock
-                className="w-4 h-4 text-gray-600 cursor-pointer"
+                className="h-4 w-4 cursor-pointer text-gray-600"
                 onClick={() => props.onFocusPicker(activityId)}
             />
 
@@ -36,7 +36,7 @@ export default function TimeField(props: {
                 value={value}
                 onChange={(e) => props.onChange(e.target.value)}
                 className={[
-                    "no-time-picker w-full bg-transparent px-1 py-1 text-sm font-medium focus:outline-none",
+                    "no-time-picker min-w-0 w-full bg-transparent px-1 py-1 text-sm font-medium focus:outline-none",
 
                     error
                         ? [
@@ -55,8 +55,8 @@ export default function TimeField(props: {
 
             {error && (
                 <div
-                    className="pointer-events-none absolute left-0 -top-10 opacity-0 group-hover/time:opacity-100 transition-opacity">
-                    <div className="rounded-md bg-gray-900 text-white text-xs px-2 py-1 shadow-lg">
+                    className="pointer-events-none absolute left-0 -top-10 z-20 opacity-0 transition-opacity group-hover/time:opacity-100">
+                    <div className="whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white shadow-lg">
                         {error.message}
                     </div>
                 </div>

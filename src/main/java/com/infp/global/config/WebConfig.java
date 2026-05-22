@@ -17,10 +17,13 @@ public class WebConfig implements WebMvcConfigurer {
                         "http://10.*:*",
                         "http://172.*:*",
                         "http://39.120.123.99:*",
+                        "https://39.120.123.99:*",
                         "http://tuk-intp.kro.kr",
-                        "https://tuk-intp.kro.kr"
+                        "https://tuk-intp.kro.kr",
+                        "http://www.tuk-intp.kro.kr",
+                        "https://www.tuk-intp.kro.kr"
                 )
-                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true); // 쿠키 사용 (Set-Cookie 사용 시 필요)
     }
