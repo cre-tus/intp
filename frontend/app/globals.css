@@ -18,29 +18,222 @@ a {
     will-change: transform;
     animation: marquee 12s linear infinite;
 }
-/* 다크모드 css */
+
+/* ========================================================
+   Modern UX/UI Premium Dark Mode System
+   ======================================================== */
 :root {
-    --bg-color: #ffffff;
-    --text-color: #000000;
+    --bg-color: #f9fafb;
+    --text-color: #111827;
     --input-bg: #ffffff;
-    /* 폰트 추가   */
+    --border-color: #e5e7eb;
+    --card-bg: #ffffff;
+    --card-bg-alt: #f3f4f6;
     --font-infp: "YourFontName";
 }
 
 .dark-mode {
-    --bg-color: #1a1a1a;
-    --text-color: #f0f0f0;
-    --input-bg: #2d2d2d;
+    --bg-color: #0b0f19; /* Sleek obsidian slate */
+    --text-color: #f3f4f6; /* Soft off-white */
+    --input-bg: #0d131f; /* Darker input fields */
+    --border-color: #1e293b; /* Premium slate borders */
+    --card-bg: #161b26; /* Deep slate cards */
+    --card-bg-alt: #1f2937; /* Lighter slate accents */
+    
+    color-scheme: dark;
 }
 
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s ease, color 0.3s ease;
     margin: 0;
 }
 
-{/* 기본 clock 아이콘 숨김 처리 */}
+/* ========================================================
+   Premium Global Dark Mode Selectors & Overrides
+   ======================================================== */
+.dark-mode {
+    /* 1. Global Page and Card Backgrounds */
+    .bg-white {
+        background-color: var(--card-bg) !important;
+    }
+    .bg-gray-50 {
+        background-color: var(--card-bg-alt) !important;
+    }
+    .bg-gray-100 {
+        background-color: var(--card-bg-alt) !important;
+    }
+    .bg-gray-50\/50 {
+        background-color: rgba(31, 41, 55, 0.5) !important;
+    }
+    .bg-emerald-50 {
+        background-color: rgba(16, 185, 129, 0.1) !important;
+    }
+    .bg-red-50 {
+        background-color: rgba(239, 68, 68, 0.1) !important;
+    }
+
+    /* Gradients */
+    .bg-gradient-to-b.from-white.to-gray-50 {
+        background-image: linear-gradient(to bottom, var(--card-bg), var(--bg-color)) !important;
+    }
+    .bg-gradient-to-r.from-transparent.to-gray-100 {
+        background-image: linear-gradient(to right, transparent, var(--card-bg-alt)) !important;
+    }
+    .bg-gradient-to-r.from-gray-50.to-white {
+        background-image: linear-gradient(to right, var(--card-bg-alt), var(--card-bg)) !important;
+    }
+    .bg-gradient-to-r.from-gray-100.to-white {
+        background-image: linear-gradient(to right, var(--card-bg-alt), var(--card-bg)) !important;
+    }
+    .bg-gradient-to-b.from-gray-50.to-white {
+        background-image: linear-gradient(to bottom, var(--card-bg-alt), var(--card-bg)) !important;
+    }
+
+    /* 2. Global Text Colors */
+    .text-gray-950,
+    .text-gray-900,
+    .text-gray-800,
+    .text-black {
+        color: var(--text-color) !important;
+    }
+    .text-gray-700,
+    .text-gray-600 {
+        color: #9ca3af !important; /* Cool gray-400 */
+    }
+    .text-gray-500 {
+        color: #6b7280 !important; /* Muted gray-500 */
+    }
+    .text-emerald-700 {
+        color: #34d399 !important; /* Vibrant emerald-400 */
+    }
+    .text-emerald-800 {
+        color: #6ee7b7 !important; /* Light emerald-300 */
+    }
+    .text-emerald-950 {
+        color: #f3f4f6 !important;
+    }
+    
+    /* 3. Global Borders */
+    .border-gray-200,
+    .border-gray-300 {
+        border-color: var(--border-color) !important;
+    }
+    .border-dashed {
+        border-style: dashed !important;
+    }
+
+    /* 4. Global Hover States */
+    .hover\:bg-gray-50:hover {
+        background-color: var(--card-bg-alt) !important;
+    }
+    .hover\:bg-gray-100:hover {
+        background-color: var(--card-bg-alt) !important;
+    }
+    .hover\:border-gray-300:hover {
+        border-color: #374151 !important;
+    }
+    .hover\:border-gray-900:hover {
+        border-color: #f3f4f6 !important;
+    }
+    .hover\:text-gray-950:hover,
+    .hover\:text-gray-900:hover {
+        color: #ffffff !important;
+    }
+
+    /* 5. Inputs, Selects, and Textareas */
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="time"],
+    input[type="password"],
+    input[type="email"],
+    select,
+    textarea {
+        background-color: var(--input-bg) !important;
+        color: var(--text-color) !important;
+        border-color: var(--border-color) !important;
+    }
+    input::placeholder,
+    textarea::placeholder {
+        color: #4b5563 !important; /* Muted dark placeholder */
+    }
+
+    /* 6. Admin, Buttons and Specific Interactive Overrides */
+    .bg-gray-950 {
+        background-color: #ffffff !important;
+        color: #0b0f19 !important;
+    }
+    .bg-gray-950:hover {
+        background-color: #f3f4f6 !important;
+    }
+    .hover\:bg-black:hover {
+        background-color: #f3f4f6 !important;
+    }
+
+    /* Premium Shadows for Dark Elements */
+    .shadow-sm {
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.5) !important;
+    }
+    .shadow-md {
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.25) !important;
+    }
+    .shadow-lg {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.25) !important;
+    }
+    .shadow-2xl {
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8) !important;
+    }
+
+    /* Modal Backdrop Overrides */
+    .bg-black\/40 {
+        background-color: rgba(0, 0, 0, 0.7) !important;
+    }
+    .bg-black\/55 {
+        background-color: rgba(0, 0, 0, 0.75) !important;
+    }
+
+    /* Leaflet Maps Styling Enhancements in Dark Mode */
+    .leaflet-container {
+        background: #111827 !important;
+    }
+    .leaflet-bar a,
+    .leaflet-control-zoom {
+        background-color: var(--card-bg) !important;
+        border-color: var(--border-color) !important;
+        color: var(--text-color) !important;
+    }
+    .leaflet-bar a:hover {
+        background-color: var(--card-bg-alt) !important;
+    }
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+        background-color: var(--card-bg) !important;
+        color: var(--text-color) !important;
+        box-shadow: 0 3px 14px rgba(0,0,0,0.6) !important;
+    }
+}
+
+/* ========================================================
+   Custom Scrollbar & Picker styles
+   ======================================================== */
+.dark-mode *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.dark-mode *::-webkit-scrollbar-track {
+    background: #0b0f19;
+}
+.dark-mode *::-webkit-scrollbar-thumb {
+    background: #1f2937;
+    border-radius: 4px;
+}
+.dark-mode *::-webkit-scrollbar-thumb:hover {
+    background: #374151;
+}
+
+/* 기본 clock 아이콘 숨김 처리 */
 @layer utilities {
     .no-time-picker::-webkit-calendar-picker-indicator {
         display: none;
@@ -52,7 +245,7 @@ body {
     }
 }
 
-{/* 기본 date 아이콘 숨김 처리 */}
+/* 기본 date 아이콘 숨김 처리 */
 @layer utilities {
     .no-date-picker::-webkit-calendar-picker-indicator {
         opacity: 0;
@@ -64,7 +257,7 @@ body {
     }
 }
 
-{/* 오류 애니메이션 */}
+/* 오류 애니메이션 */
 @keyframes shake {
     0% { transform: translateX(0); }
     25% { transform: translateX(-2px); }

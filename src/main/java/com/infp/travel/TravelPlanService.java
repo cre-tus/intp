@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Set;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 @Service
@@ -65,6 +66,7 @@ public class TravelPlanService {
         } else {
             requireCanEdit(entity, owner);
         }
+        content = contentWithCanonicalOwner(content, entity.getOwner());
 
         entity.setTitle(requireText(request.title(), "제목이 필요합니다."));
         entity.setTemplate(blankToDefault(request.template(), "basic"));
@@ -74,7 +76,7 @@ public class TravelPlanService {
         entity.setEndDate(lastDate(content, entity.getStartDate()));
 
         TravelPlanEntity saved = repository.saveAndFlush(entity);
-        ensureOwnerMember(saved, userId);
+        ensureOwnerMember(saved, saved.getOwner().getId());
         syncPlanMembers(saved, content);
         syncSpreadsheetCells(saved, content);
         return toResponse(saved);
@@ -85,6 +87,55 @@ public class TravelPlanService {
         TravelPlanEntity entity = requirePlan(externalId);
         requireOwner(entity, userId);
         deletePlanRows(entity.getId(), externalId);
+    }
+
+    @Transactional
+    public TravelPlanResponse transferOwner(String externalId, long requesterId, Long newOwnerId) {
+        if (newOwnerId == null) {
+            throw new IllegalArgumentException("새 오너를 선택해주세요.");
+        }
+
+        TravelPlanEntity entity = requirePlan(externalId);
+        requireOwner(entity, requesterId);
+
+        User newOwner = userRepository.findById(newOwnerId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        entity.setOwner(newOwner);
+        entity.setContentJson(toJson(contentWithOwner(entity, requesterId, newOwner)));
+
+        TravelPlanEntity saved = repository.saveAndFlush(entity);
+        ensureOwnerMember(saved, newOwnerId);
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public TravelPlanResponse updateParticipantRole(String externalId, long targetUserId, long requesterId, String requestedRole) {
+        TravelPlanEntity entity = requirePlan(externalId);
+        requireOwner(entity, requesterId);
+        if (isOwner(entity, targetUserId)) {
+            throw new IllegalArgumentException("오너 권한은 변경할 수 없습니다.");
+        }
+
+        String role = normalizeRole(requestedRole, "VIEWER");
+        if ("OWNER".equals(role)) {
+            throw new IllegalArgumentException("오너 권한은 오너 넘기기로만 변경할 수 있습니다.");
+        }
+
+        User target = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        entity.setContentJson(toJson(contentWithParticipantRole(entity, target, role)));
+
+        TravelPlanEntity saved = repository.saveAndFlush(entity);
+        jdbcTemplate.update("""
+                        INSERT INTO plan_members (plan_id, user_id, role, status)
+                        VALUES (?, ?, ?, 'ACTIVE')
+                        ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'ACTIVE'
+                        """,
+                saved.getId(),
+                targetUserId,
+                role
+        );
+        return toResponse(saved);
     }
 
     private void cleanupOwnedPlansWithoutActiveMembers(long userId) {
@@ -172,6 +223,153 @@ public class TravelPlanService {
         throw new IllegalArgumentException("여행 계획 수정 권한이 없습니다.");
     }
 
+    private JsonNode contentWithOwner(TravelPlanEntity entity, long previousOwnerId, User newOwner) {
+        JsonNode content = parseJson(entity.getContentJson());
+        if (!(content instanceof ObjectNode objectNode)) return content;
+
+        ArrayNode participants = participantsArray(objectNode);
+        boolean newOwnerFound = false;
+        for (JsonNode participant : participants) {
+            if (!(participant instanceof ObjectNode participantNode)) continue;
+
+            Long participantUserId = participantUserId(participantNode);
+            String email = text(participantNode, "email").trim().toLowerCase(Locale.ROOT);
+            boolean isNewOwner = participantUserId != null && participantUserId.equals(newOwner.getId())
+                    || email.equals(newOwner.getEmail().trim().toLowerCase(Locale.ROOT));
+            boolean isPreviousOwner = participantUserId != null && participantUserId.equals(previousOwnerId)
+                    || "OWNER".equals(normalizeRole(text(participantNode, "role"), "EDITOR"));
+
+            if (isNewOwner) {
+                participantNode.put("id", newOwner.getId());
+                participantNode.put("name", displayName(newOwner));
+                participantNode.put("email", newOwner.getEmail());
+                participantNode.put("role", "OWNER");
+                newOwnerFound = true;
+            } else if (isPreviousOwner) {
+                participantNode.put("role", "EDITOR");
+            }
+        }
+
+        if (!newOwnerFound) {
+            ObjectNode newOwnerNode = objectMapper.createObjectNode();
+            newOwnerNode.put("id", newOwner.getId());
+            newOwnerNode.put("name", displayName(newOwner));
+            newOwnerNode.put("email", newOwner.getEmail());
+            newOwnerNode.put("role", "OWNER");
+            participants.add(newOwnerNode);
+        }
+        return objectNode;
+    }
+
+    private JsonNode contentWithCanonicalOwner(JsonNode content, User owner) {
+        if (owner == null || !(content instanceof ObjectNode objectNode)) return content;
+        OwnerSnapshot ownerSnapshot = ownerSnapshot(owner.getId());
+
+        ArrayNode participants = participantsArray(objectNode);
+        boolean ownerFound = false;
+        for (JsonNode participant : participants) {
+            if (!(participant instanceof ObjectNode participantNode)) continue;
+
+            Long participantUserId = participantUserId(participantNode);
+            String email = text(participantNode, "email").trim().toLowerCase(Locale.ROOT);
+            boolean isOwnerParticipant = participantUserId != null && participantUserId.equals(ownerSnapshot.id())
+                    || email.equals(ownerSnapshot.email().trim().toLowerCase(Locale.ROOT));
+
+            if (isOwnerParticipant) {
+                participantNode.put("id", ownerSnapshot.id());
+                participantNode.put("name", ownerSnapshot.name());
+                participantNode.put("email", ownerSnapshot.email());
+                participantNode.put("role", "OWNER");
+                ownerFound = true;
+            } else if ("OWNER".equals(normalizeRole(text(participantNode, "role"), "EDITOR"))) {
+                participantNode.put("role", "EDITOR");
+            }
+        }
+
+        if (!ownerFound) {
+            ObjectNode ownerNode = objectMapper.createObjectNode();
+            ownerNode.put("id", ownerSnapshot.id());
+            ownerNode.put("name", ownerSnapshot.name());
+            ownerNode.put("email", ownerSnapshot.email());
+            ownerNode.put("role", "OWNER");
+            participants.add(ownerNode);
+        }
+        return objectNode;
+    }
+
+    private JsonNode contentWithParticipantRole(TravelPlanEntity entity, User target, String role) {
+        JsonNode content = parseJson(entity.getContentJson());
+        if (!(content instanceof ObjectNode objectNode)) return content;
+
+        ArrayNode participants = participantsArray(objectNode);
+        boolean found = false;
+        for (JsonNode participant : participants) {
+            if (!(participant instanceof ObjectNode participantNode)) continue;
+
+            Long participantUserId = participantUserId(participantNode);
+            String email = text(participantNode, "email").trim().toLowerCase(Locale.ROOT);
+            boolean isTarget = participantUserId != null && participantUserId.equals(target.getId())
+                    || email.equals(target.getEmail().trim().toLowerCase(Locale.ROOT));
+            if (!isTarget) continue;
+
+            participantNode.put("id", target.getId());
+            participantNode.put("name", displayName(target));
+            participantNode.put("email", target.getEmail());
+            participantNode.put("role", role);
+            found = true;
+        }
+
+        if (!found) {
+            ObjectNode targetNode = objectMapper.createObjectNode();
+            targetNode.put("id", target.getId());
+            targetNode.put("name", displayName(target));
+            targetNode.put("email", target.getEmail());
+            targetNode.put("role", role);
+            participants.add(targetNode);
+        }
+        return objectNode;
+    }
+
+    private ArrayNode participantsArray(ObjectNode objectNode) {
+        JsonNode participants = objectNode.get("participants");
+        if (participants instanceof ArrayNode arrayNode) return arrayNode;
+
+        ArrayNode arrayNode = objectMapper.createArrayNode();
+        objectNode.set("participants", arrayNode);
+        return arrayNode;
+    }
+
+    private Long participantUserId(JsonNode participant) {
+        JsonNode id = participant == null ? null : participant.get("id");
+        return id != null && id.isNumber() ? id.asLong() : null;
+    }
+
+    private String displayName(User user) {
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        String fullName = ((user.getFirstName() == null ? "" : user.getFirstName()) + " "
+                + (user.getLastName() == null ? "" : user.getLastName())).trim();
+        return fullName.isBlank() ? user.getEmail() : fullName;
+    }
+
+    private OwnerSnapshot ownerSnapshot(Long userId) {
+        return jdbcTemplate.queryForObject("""
+                        SELECT id, email,
+                               COALESCE(NULLIF(nickname, ''), NULLIF(TRIM(CONCAT(first_name, ' ', last_name)), ''), email) AS name
+                        FROM users
+                        WHERE id = ?
+                        """,
+                (rs, rowNum) -> new OwnerSnapshot(
+                        rs.getLong("id"),
+                        rs.getString("email"),
+                        rs.getString("name")
+                ),
+                userId
+        );
+    }
+
+    private record OwnerSnapshot(Long id, String email, String name) {
+    }
+
     private boolean isOwner(TravelPlanEntity entity, long userId) {
         return entity.getOwner() != null && entity.getOwner().getId().equals(userId);
     }
@@ -206,6 +404,11 @@ public class TravelPlanService {
     }
 
     private void ensureOwnerMember(TravelPlanEntity entity, long userId) {
+        jdbcTemplate.update(
+                "UPDATE plan_members SET role = 'EDITOR' WHERE plan_id = ? AND role = 'OWNER' AND user_id <> ?",
+                entity.getId(),
+                userId
+        );
         jdbcTemplate.update("""
                         INSERT INTO plan_members (plan_id, user_id, role, status)
                         VALUES (?, ?, 'OWNER', 'ACTIVE')
@@ -303,12 +506,13 @@ public class TravelPlanService {
     }
 
     private TravelPlanResponse toResponse(TravelPlanEntity entity) {
+        JsonNode content = contentWithCanonicalOwner(parseJson(entity.getContentJson()), entity.getOwner());
         return new TravelPlanResponse(
                 entity.getExternalId(),
                 entity.getTitle(),
                 entity.getTemplate(),
                 entity.getTier(),
-                parseJson(entity.getContentJson()),
+                content,
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );

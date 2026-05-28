@@ -166,7 +166,10 @@ export default function PrimaryButton() {
                             <>
                                 <DialogTitle title="입금 정보 입력" description="관리자가 입금 확인 완료를 누르면 해당 템플릿 ID가 유료 버전으로 승격됩니다." />
                                 <div className="mt-5 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
-                                    결제 금액: <strong>3,500원</strong>
+                                    <div>결제 금액: <strong>3,500원</strong></div>
+                                    <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">
+                                        입금 계좌: <strong className="text-gray-900 font-bold">352-0358-5355-13 (농협 윤진영)</strong>
+                                    </div>
                                 </div>
                                 <label className="mt-5 block text-sm font-semibold text-gray-700">입금자명</label>
                                 <input value={depositorName} onChange={(event) => setDepositorName(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />

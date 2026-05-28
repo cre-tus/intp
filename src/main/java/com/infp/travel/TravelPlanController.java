@@ -4,6 +4,8 @@ import com.infp.auth.jwt.JwtAuthFilter;
 import com.infp.travel.dto.TravelPlanRequest;
 import com.infp.travel.dto.TravelPlanResponse;
 import com.infp.travel.dto.TravelPlanSummaryResponse;
+import com.infp.travel.dto.TransferPlanOwnerRequest;
+import com.infp.travel.dto.UpdateTravelPlanParticipantRoleRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -62,6 +64,25 @@ public class TravelPlanController {
     ) {
         TravelPlanRequest normalized = new TravelPlanRequest(id, request.title(), request.template(), request.tier(), request.content());
         return ResponseEntity.ok(service.save(requireUser(principal), normalized));
+    }
+
+    @PostMapping("/{id}/owner")
+    public ResponseEntity<TravelPlanResponse> transferOwner(
+            @PathVariable String id,
+            @RequestBody TransferPlanOwnerRequest request,
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(service.transferOwner(id, requireUser(principal), request.userId()));
+    }
+
+    @PutMapping("/{id}/participants/{userId}/role")
+    public ResponseEntity<TravelPlanResponse> updateParticipantRole(
+            @PathVariable String id,
+            @PathVariable long userId,
+            @RequestBody UpdateTravelPlanParticipantRoleRequest request,
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(service.updateParticipantRole(id, userId, requireUser(principal), request.role()));
     }
 
     @DeleteMapping("/{id}")

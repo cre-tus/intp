@@ -32,7 +32,9 @@ public class PlanRealtimeWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         String planId = planId(session);
-        latestMessageByPlanId.put(planId, message.getPayload());
+        if (isPlanUpdate(message.getPayload())) {
+            latestMessageByPlanId.put(planId, message.getPayload());
+        }
         for (WebSocketSession candidate : sessionsByPlanId.getOrDefault(planId, Set.of())) {
             if (candidate.isOpen() && !candidate.getId().equals(session.getId())) {
                 candidate.sendMessage(message);
@@ -58,5 +60,9 @@ public class PlanRealtimeWebSocketHandler extends TextWebSocketHandler {
         String path = uri.getPath();
         int idx = path.lastIndexOf('/');
         return idx >= 0 && idx + 1 < path.length() ? path.substring(idx + 1) : "default";
+    }
+
+    private boolean isPlanUpdate(String payload) {
+        return payload != null && payload.contains("\"PLAN_UPDATED\"");
     }
 }

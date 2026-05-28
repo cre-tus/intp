@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import type { ReactNode } from "react";
 import { Crown, Copy, Plus, Trash2, UserCog, Users } from "lucide-react";
 import { SaveSection } from "@/components/planner/SaveSection";
+import { api } from "@/service/api";
 
 export interface Participant {
     id: number;
@@ -11,6 +12,19 @@ export interface Participant {
     email?: string;
     role?: "OWNER" | "EDITOR" | "VIEWER";
 }
+
+const editableRoles = [
+    { value: "EDITOR", label: "편집자" },
+    { value: "VIEWER", label: "조회자" },
+] satisfies { value: NonNullable<Participant["role"]>; label: string }[];
+
+type TravelPlanRoleResponse = {
+    content?: {
+        participants?: Participant[];
+    };
+};
+
+const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6", "#f59e0b", "#06b6d4"];
 
 interface ParticipantsSidebarProps {
     participants: Participant[];
@@ -21,6 +35,7 @@ interface ParticipantsSidebarProps {
     routeCalculator?: ReactNode;
     currentUserEmail?: string;
     currentUserName?: string;
+    onParticipantsSynced?: (participants: Participant[]) => void;
 }
 
 export default function ParticipantsSidebar({
@@ -32,6 +47,7 @@ export default function ParticipantsSidebar({
     routeCalculator,
     currentUserEmail,
     currentUserName,
+    onParticipantsSynced,
 }: ParticipantsSidebarProps) {
     const [newParticipantEmail, setNewParticipantEmail] = useState("");
     const [notice, setNotice] = useState("");
@@ -83,7 +99,39 @@ export default function ParticipantsSidebar({
         window.setTimeout(() => onSave?.(), 0);
     };
 
-    const transferOwner = (id: number) => {
+    const updateParticipantRole = async (id: number, role: "EDITOR" | "VIEWER") => {
+        if (!isOwner) {
+            setNotice("오너만 참여자 권한을 변경할 수 있습니다.");
+            return;
+        }
+        const target = participants.find((participant) => participant.id === id);
+        if (!target || target.role === "OWNER") return;
+        if (planId) {
+            try {
+                const response = await api.put<TravelPlanRoleResponse>(
+                    `/api/travel-plans/${encodeURIComponent(planId)}/participants/${id}/role`,
+                    { role },
+                );
+                if (response.data.content?.participants) {
+                    if (onParticipantsSynced) onParticipantsSynced(response.data.content.participants);
+                    else setParticipants(response.data.content.participants);
+                    setNotice(`${target.name}님의 권한을 ${role === "EDITOR" ? "편집자" : "조회자"}로 변경했습니다.`);
+                    return;
+                }
+            } catch (error) {
+                setNotice(apiErrorMessage(error, "참여자 권한 변경 저장에 실패했습니다."));
+                return;
+            }
+        }
+        setParticipants((prev) =>
+            prev.map((participant) =>
+                participant.id === id ? { ...participant, role } : participant
+            )
+        );
+        setNotice(`${target.name}님의 권한을 ${role === "EDITOR" ? "편집자" : "조회자"}로 변경했습니다.`);
+    };
+
+    const transferOwner = async (id: number) => {
         if (!isOwner) {
             setNotice("오너만 오너 권한을 넘길 수 있습니다.");
             return;
@@ -91,6 +139,23 @@ export default function ParticipantsSidebar({
         const target = participants.find((participant) => participant.id === id);
         if (!target || target.role === "OWNER") return;
         if (!window.confirm(`${target.name}님에게 오너 권한을 넘길까요?`)) return;
+        if (planId) {
+            try {
+                const response = await api.post<TravelPlanRoleResponse>(
+                    `/api/travel-plans/${encodeURIComponent(planId)}/owner`,
+                    { userId: id },
+                );
+                if (response.data.content?.participants) {
+                    if (onParticipantsSynced) onParticipantsSynced(response.data.content.participants);
+                    else setParticipants(response.data.content.participants);
+                    setNotice(`${target.name}님에게 오너 권한을 넘겼습니다.`);
+                    return;
+                }
+            } catch (error) {
+                setNotice(apiErrorMessage(error, "오너 권한 넘기기 저장에 실패했습니다."));
+                return;
+            }
+        }
         setParticipants((prev) =>
             prev.map((participant) => {
                 if (participant.id === id) return { ...participant, role: "OWNER" };
@@ -98,7 +163,6 @@ export default function ParticipantsSidebar({
                 return participant;
             })
         );
-        window.setTimeout(() => onSave?.(), 0);
         setNotice(`${target.name}님에게 오너 권한을 넘겼습니다.`);
     };
 
@@ -186,7 +250,11 @@ export default function ParticipantsSidebar({
                                 key={participant.id}
                                 className="group flex min-w-0 items-center gap-3 rounded-lg border border-gray-200 bg-gradient-to-r from-gray-50 to-white p-3 transition-all hover:border-gray-900 hover:shadow-md"
                             >
-                                <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gray-900 to-gray-700 text-sm font-bold text-white shadow-sm">
+                                <div
+                                    className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold text-white shadow-sm"
+                                    style={{ backgroundColor: participantColor(participant) }}
+                                    title="참여자 색상"
+                                >
                                     {index + 1}
                                 </div>
 
@@ -200,10 +268,28 @@ export default function ParticipantsSidebar({
                                     </div>
                                 </div>
 
+                                {participant.role !== "OWNER" && (
+                                    <select
+                                        value={participant.role ?? "EDITOR"}
+                                        onChange={(event) =>
+                                            void updateParticipantRole(participant.id, event.target.value as "EDITOR" | "VIEWER")
+                                        }
+                                        disabled={!isOwner}
+                                        className="h-8 shrink-0 rounded-lg border border-gray-300 bg-white px-2 text-xs font-semibold text-gray-700 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                                        title="참여자 권한"
+                                    >
+                                        {editableRoles.map((role) => (
+                                            <option key={role.value} value={role.value}>
+                                                {role.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+
                                 {participant.role !== "OWNER" && isOwner && (
                                     <button
                                         type="button"
-                                        onClick={() => transferOwner(participant.id)}
+                                        onClick={() => void transferOwner(participant.id)}
                                         className="shrink-0 rounded-lg p-1.5 transition-all hover:scale-110 hover:bg-amber-50 sm:opacity-0 sm:group-hover:opacity-100"
                                         title="오너 넘기기"
                                     >
@@ -244,4 +330,25 @@ export default function ParticipantsSidebar({
             {routeCalculator}
         </div>
     );
+}
+
+function participantColor(participant: Participant) {
+    const value = participant.email || String(participant.id) || participant.name;
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+    }
+    return TEAM_COLORS[hash % TEAM_COLORS.length];
+}
+
+function apiErrorMessage(error: unknown, fallback: string) {
+    if (
+        typeof error === "object"
+        && error !== null
+        && "response" in error
+        && typeof (error as { response?: { data?: unknown } }).response?.data === "string"
+    ) {
+        return (error as { response: { data: string } }).response.data;
+    }
+    return fallback;
 }

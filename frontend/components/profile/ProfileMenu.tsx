@@ -50,16 +50,7 @@ export default function ProfileMenu() {
                 onClick={() => setOpen((value) => !value)}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                style={{
-                    border: "1px solid #e5e5e5",
-                    background: "#fff",
-                    borderRadius: 999,
-                    padding: 6,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white cursor-pointer hover:scale-105 transition"
             >
                 <ProfileIcon size={26} />
             </button>
@@ -67,27 +58,19 @@ export default function ProfileMenu() {
             {open && (
                 <div
                     ref={panelRef}
+                    className="absolute right-0 z-50 w-[220px] rounded-[14px] border border-gray-200 bg-white shadow-xl overflow-hidden"
                     style={{
-                        position: "absolute",
                         top: "calc(100% + 10px)",
-                        right: 0,
-                        width: 220,
-                        background: "#fff",
-                        border: "1px solid #eee",
-                        borderRadius: 14,
-                        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-                        overflow: "hidden",
-                        zIndex: 50,
                     }}
                 >
-                    <div style={{ padding: "12px 14px", borderBottom: "1px solid #f2f2f2" }}>
-                        <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    <div className="border-b border-gray-100 px-[14px] py-[12px]">
+                        <div className="text-sm font-bold text-gray-900">
                             {me?.nickname ?? me?.email ?? "User"}
                         </div>
-                        <div style={{ fontSize: 12, opacity: 0.65 }}>{me?.email ?? ""}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{me?.email ?? ""}</div>
                     </div>
 
-                    <div style={{ display: "flex", flexDirection: "column" }}>
+                    <div className="flex flex-col">
                         <MenuButton onClick={() => go("/mypage")}>마이페이지</MenuButton>
                         {me?.role === "ADMIN" && (
                             <>
@@ -108,13 +91,7 @@ function MenuButton({ children, onClick }: { children: React.ReactNode; onClick:
         <button
             type="button"
             onClick={onClick}
-            style={{
-                padding: "12px 14px",
-                cursor: "pointer",
-                textAlign: "left",
-                background: "#fff",
-                border: 0,
-            }}
+            className="w-full bg-white px-[14px] py-[12px] text-left text-sm font-semibold text-gray-900 cursor-pointer hover:bg-gray-50 transition-colors"
         >
             {children}
         </button>
