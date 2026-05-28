@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { CSSProperties, SetStateAction, SyntheticEvent } from "react";
+import { useRouter } from "next/navigation";
 import TravelCheckList, { ChecklistItem } from "@/components/planner/TravelCheckList";
 import TravelItinerary, { ItineraryDay, SelectedCostCell } from "@/components/planner/TravelItinerary";
 import ParticipantsSidebar, { Participant } from "@/components/planner/ParticipantsSidebar";
@@ -25,10 +26,27 @@ type RealtimeMessage = {
     editorName?: string;
     editorEmail?: string;
     updatedAt?: string;
+} | {
+    type: "PRESENCE_UPDATE" | "PRESENCE_CLEAR";
+    clientId: string;
+    editorName?: string;
+    editorEmail?: string;
+    color?: string;
+    target: string;
+    updatedAt?: string;
 };
+
+type ActiveEditor = {
+    name: string;
+    email: string;
+    color: string;
+};
+
+const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6", "#f59e0b", "#06b6d4"];
 
 export default function HeroSection({ createId, allowCreate = false }: { createId?: string; allowCreate?: boolean }) {
     const { me, isLoggedIn, fetchMe } = useAuthStore();
+    const router = useRouter();
     const planId = createId ?? "default";
     const clientIdRef = useRef<string>(createClientId("client"));
     const socketRef = useRef<WebSocket | null>(null);
@@ -36,6 +54,9 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const pendingBroadcastRef = useRef(false);
     const draftRef = useRef<TravelPlanDraft | null>(null);
     const dirtyRef = useRef(false);
+    const skipNextDirtyMarkRef = useRef(false);
+    const realtimeSyncTimerRef = useRef<number | null>(null);
+    const remotePersistTimerRef = useRef<number | null>(null);
     const editorRef = useRef({ name: "사용자", email: "" });
     const [syncStatus, setSyncStatus] = useState("오프라인 저장");
     const [initialPlan, setInitialPlan] = useState<TravelPlanDraft>(() => createEmptyTravelPlan(planId));
@@ -51,6 +72,8 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const [lastEditorName, setLastEditorName] = useState("사용자");
     const [lastEditorEmail, setLastEditorEmail] = useState("");
     const [missingPlan, setMissingPlan] = useState(false);
+    const [activeEditorsByTarget, setActiveEditorsByTarget] = useState<Record<string, ActiveEditor>>({});
+    const loginAlertOpenRef = useRef(false);
 
     useEffect(() => {
         void fetchMe();
@@ -154,6 +177,10 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     useEffect(() => {
         draftRef.current = draft;
         editorRef.current = { name: currentEditorName, email: currentEditorEmail };
+        if (skipNextDirtyMarkRef.current) {
+            skipNextDirtyMarkRef.current = false;
+            return;
+        }
         dirtyRef.current = true;
     }, [currentEditorEmail, currentEditorName, draft]);
 
@@ -199,14 +226,44 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             socket.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data) as RealtimeMessage;
-                    if (message.type !== "PLAN_UPDATED" || message.clientId === clientIdRef.current) return;
+                    if (message.clientId === clientIdRef.current) return;
+                    if (message.type === "PRESENCE_UPDATE") {
+                        setActiveEditorsByTarget((prev) => ({
+                            ...prev,
+                            [message.target]: {
+                                name: message.editorName || message.editorEmail || "사용자",
+                                email: message.editorEmail ?? "",
+                                color: message.color || editorColor(message.editorEmail || message.editorName || message.clientId),
+                            },
+                        }));
+                        return;
+                    }
+                    if (message.type === "PRESENCE_CLEAR") {
+                        setActiveEditorsByTarget((prev) => {
+                            const next = { ...prev };
+                            delete next[message.target];
+                            return next;
+                        });
+                        return;
+                    }
+                    if (message.type !== "PLAN_UPDATED") return;
 
                     applyingRemoteRef.current = true;
+                    skipNextDirtyMarkRef.current = true;
                     setTitle(message.plan.title);
                     setChecklist(message.plan.checklist);
                     setParticipants(message.plan.participants);
                     setDays(message.plan.days);
-                    void saveTravelPlan(message.plan);
+                    draftRef.current = message.plan;
+                    setInitialPlan(message.plan);
+                    dirtyRef.current = false;
+                    if (remotePersistTimerRef.current != null) {
+                        window.clearTimeout(remotePersistTimerRef.current);
+                    }
+                    remotePersistTimerRef.current = window.setTimeout(() => {
+                        remotePersistTimerRef.current = null;
+                        void saveTravelPlan(message.plan).catch(() => setSyncStatus("원격 저장 반영 실패"));
+                    }, 500);
                     setLastSavedAt(message.plan.updatedAt);
                     setLastEditorName(message.editorName || message.editorEmail || "다른 사용자");
                     setLastEditorEmail(message.editorEmail ?? "");
@@ -229,7 +286,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     }, [planId]);
 
     const saveCurrentPlan = useCallback(async (broadcast = true, planOverride?: TravelPlanDraft) => {
-        const source = planOverride ?? draft;
+        const source = planOverride ?? draftRef.current ?? draft;
         const saved = { ...source, updatedAt: new Date().toISOString() };
         let persisted: TravelPlanDraft;
         try {
@@ -251,10 +308,10 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             const message: RealtimeMessage = {
                 type: "PLAN_UPDATED",
                 clientId: clientIdRef.current,
-                plan: saved,
+                plan: persisted,
                 editorName: currentEditorName,
                 editorEmail: currentEditorEmail,
-                updatedAt: saved.updatedAt,
+                updatedAt: persisted.updatedAt,
             };
             socketRef.current.send(JSON.stringify(message));
             setSyncStatus("실시간 동기화됨");
@@ -265,6 +322,50 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         pendingBroadcastRef.current = true;
         setSyncStatus("실시간 연결 대기중");
     }, [currentEditorEmail, currentEditorName, draft]);
+
+    const broadcastPlan = useCallback((plan: TravelPlanDraft, status = "실시간 동기화됨") => {
+        const message: RealtimeMessage = {
+            type: "PLAN_UPDATED",
+            clientId: clientIdRef.current,
+            plan,
+            editorName: currentEditorName,
+            editorEmail: currentEditorEmail,
+            updatedAt: plan.updatedAt,
+        };
+
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify(message));
+            pendingBroadcastRef.current = false;
+            setSyncStatus(status);
+            return;
+        }
+
+        pendingBroadcastRef.current = true;
+        setSyncStatus("실시간 연결 대기중");
+    }, [currentEditorEmail, currentEditorName]);
+
+    const broadcastPresence = useCallback((target: string, type: "PRESENCE_UPDATE" | "PRESENCE_CLEAR" = "PRESENCE_UPDATE") => {
+        if (socketRef.current?.readyState !== WebSocket.OPEN) return;
+        socketRef.current.send(JSON.stringify({
+            type,
+            clientId: clientIdRef.current,
+            target,
+            editorName: currentEditorName,
+            editorEmail: currentEditorEmail,
+            color: editorColor(currentEditorEmail || currentEditorName),
+            updatedAt: new Date().toISOString(),
+        } satisfies RealtimeMessage));
+    }, [currentEditorEmail, currentEditorName]);
+
+    const editingFrameStyle = useCallback((target: string): CSSProperties => {
+        const editor = activeEditorsByTarget[target];
+        return {
+            borderColor: editor?.color ?? "#111827",
+            boxShadow: editor ? `0 0 0 2px ${editor.color}33` : undefined,
+        };
+    }, [activeEditorsByTarget]);
+
+    const editingLabel = useCallback((target: string) => activeEditorsByTarget[target]?.name, [activeEditorsByTarget]);
 
     useEffect(() => {
         const timer = window.setInterval(() => {
@@ -296,8 +397,114 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     }, [saveCurrentPlan]);
 
     const commitRealtimeSync = useCallback((planOverride?: TravelPlanDraft) => {
+        if (realtimeSyncTimerRef.current != null) {
+            window.clearTimeout(realtimeSyncTimerRef.current);
+            realtimeSyncTimerRef.current = null;
+        }
         window.setTimeout(() => void saveCurrentPlan(true, planOverride), 0);
     }, [saveCurrentPlan]);
+
+    const scheduleRealtimeSync = useCallback((nextDraft: TravelPlanDraft, delay = 350) => {
+        draftRef.current = nextDraft;
+        dirtyRef.current = true;
+        broadcastPlan(nextDraft, "실시간 동기화됨");
+        if (realtimeSyncTimerRef.current != null) {
+            window.clearTimeout(realtimeSyncTimerRef.current);
+        }
+        realtimeSyncTimerRef.current = window.setTimeout(() => {
+            realtimeSyncTimerRef.current = null;
+            void saveCurrentPlan(true, nextDraft);
+        }, delay);
+    }, [broadcastPlan, saveCurrentPlan]);
+
+    const applyDraftPatch = useCallback((patch: Partial<TravelPlanDraft>, delay?: number) => {
+        const currentDraft = draftRef.current ?? draft;
+        const nextDraft = {
+            ...currentDraft,
+            ...patch,
+            updatedAt: new Date().toISOString(),
+        };
+        draftRef.current = nextDraft;
+        scheduleRealtimeSync(nextDraft, delay);
+        return nextDraft;
+    }, [draft, scheduleRealtimeSync]);
+
+    const setTitleSynced = useCallback((nextTitle: SetStateAction<string>) => {
+        const currentDraft = draftRef.current ?? draft;
+        const titleValue = typeof nextTitle === "function"
+            ? (nextTitle as (prev: string) => string)(currentDraft.title)
+            : nextTitle;
+        setTitle(titleValue);
+        applyDraftPatch({ title: titleValue });
+    }, [applyDraftPatch, draft]);
+
+    const setChecklistSynced = useCallback((nextChecklist: SetStateAction<ChecklistItem[]>) => {
+        const currentDraft = draftRef.current ?? draft;
+        const checklistValue = typeof nextChecklist === "function"
+            ? (nextChecklist as (prev: ChecklistItem[]) => ChecklistItem[])(currentDraft.checklist)
+            : nextChecklist;
+        setChecklist(checklistValue);
+        applyDraftPatch({ checklist: checklistValue });
+    }, [applyDraftPatch, draft]);
+
+    const setDaysSynced = useCallback((nextDays: SetStateAction<ItineraryDay[]>) => {
+        const currentDraft = draftRef.current ?? draft;
+        const daysValue = typeof nextDays === "function"
+            ? (nextDays as (prev: ItineraryDay[]) => ItineraryDay[])(currentDraft.days)
+            : nextDays;
+        setDays(daysValue);
+        applyDraftPatch({ days: daysValue });
+    }, [applyDraftPatch, draft]);
+
+    const setParticipantsSynced = useCallback((nextParticipants: SetStateAction<Participant[]>) => {
+        const currentDraft = draftRef.current ?? draft;
+        const participantsValue = typeof nextParticipants === "function"
+            ? (nextParticipants as (prev: Participant[]) => Participant[])(currentDraft.participants)
+            : nextParticipants;
+        setParticipants(participantsValue);
+        applyDraftPatch({ participants: participantsValue });
+    }, [applyDraftPatch, draft]);
+
+    useEffect(() => {
+        return () => {
+            if (realtimeSyncTimerRef.current != null) {
+                window.clearTimeout(realtimeSyncTimerRef.current);
+            }
+            if (remotePersistTimerRef.current != null) {
+                window.clearTimeout(remotePersistTimerRef.current);
+            }
+        };
+    }, []);
+
+    const syncAuthoritativeParticipants = useCallback((nextParticipants: Participant[]) => {
+        if (realtimeSyncTimerRef.current != null) {
+            window.clearTimeout(realtimeSyncTimerRef.current);
+            realtimeSyncTimerRef.current = null;
+        }
+        const currentDraft = draftRef.current ?? draft;
+        const nextDraft = {
+            ...currentDraft,
+            participants: nextParticipants,
+            updatedAt: new Date().toISOString(),
+        };
+        draftRef.current = nextDraft;
+        dirtyRef.current = false;
+        skipNextDirtyMarkRef.current = true;
+        setParticipants(nextParticipants);
+        setInitialPlan(nextDraft);
+        broadcastPlan(nextDraft, "권한 실시간 동기화됨");
+        void saveTravelPlan(nextDraft)
+            .then((persisted) => {
+                draftRef.current = persisted;
+                setInitialPlan(persisted);
+                setLastSavedAt(persisted.updatedAt);
+                setSyncStatus("권한 저장됨");
+            })
+            .catch(() => {
+                dirtyRef.current = true;
+                setSyncStatus("권한 저장 재시도 대기");
+            });
+    }, [broadcastPlan, draft]);
 
     const applyOptimizedRoute = useCallback((dayId: string, orderedActivityIds: string[]) => {
         const uniqueOrder = Array.from(new Set(orderedActivityIds));
@@ -328,27 +535,29 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         commitRealtimeSync(nextDraft);
     }, [commitRealtimeSync, draft]);
 
-    const handleCommitKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-        if (event.key !== "Enter") return;
-        const target = event.target;
-        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-            commitRealtimeSync();
-        }
-    };
-
-    const handleCommitClick = (event: MouseEvent<HTMLDivElement>) => {
-        const target = event.target;
-        if (target instanceof Element && target.closest("button")) {
-            commitRealtimeSync();
-        }
-    };
-
     const inviteUrl = typeof window === "undefined"
         ? ""
         : `${window.location.origin}/createplan/${planId}`;
     const editorTooltip = lastEditorEmail
         ? `마지막 수정자: ${lastEditorName} (${lastEditorEmail})`
         : `마지막 수정자: ${lastEditorName}`;
+
+    const requireLoginForInteraction = useCallback((event: SyntheticEvent<HTMLElement>) => {
+        if (isLoggedIn !== false) return;
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (!target.closest("input, textarea, select, button")) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (loginAlertOpenRef.current) return;
+        loginAlertOpenRef.current = true;
+        window.setTimeout(() => {
+            window.alert("로그인이 필요합니다.");
+            router.push("/login");
+            loginAlertOpenRef.current = false;
+        }, 0);
+    }, [isLoggedIn, router]);
 
     if (!missingPlan && (!accessStatusReady || planLoading)) {
         return (
@@ -402,8 +611,10 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         <div
             className="min-h-screen bg-gray-50"
             onBlurCapture={() => commitRealtimeSync()}
-            onKeyDownCapture={handleCommitKeyDown}
-            onClickCapture={handleCommitClick}
+            onClickCapture={requireLoginForInteraction}
+            onFocusCapture={requireLoginForInteraction}
+            onKeyDownCapture={requireLoginForInteraction}
+            onBeforeInputCapture={requireLoginForInteraction}
         >
             <div className="container mx-auto px-3 py-6 sm:px-4 sm:py-8">
                 <div className="mb-10 flex flex-col gap-2">
@@ -420,26 +631,61 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
 
                 <div className="flex flex-col items-stretch gap-6 lg:flex-row lg:items-start">
                     <div className="min-w-0 flex-1 space-y-8">
-                        <TravelCheckList checklist={checklist} setChecklist={setChecklist} />
-                        <TravelItinerary
-                            title={title}
-                            setTitle={setTitle}
-                            days={days}
-                            setDays={setDays}
-                            template={draft.template}
-                            tier={draft.tier}
-                            planId={planId}
-                            onCostSelectionChange={setSelectedCostCells}
-                        />
+                        <div
+                            className="rounded-xl border-2 transition-colors"
+                            style={editingFrameStyle("checklist")}
+                            onFocusCapture={() => broadcastPresence("checklist")}
+                            onBlurCapture={() => broadcastPresence("checklist", "PRESENCE_CLEAR")}
+                        >
+                            {editingLabel("checklist") && (
+                                <div className="px-3 pt-2 text-xs font-semibold" style={{ color: activeEditorsByTarget.checklist?.color }}>
+                                    {editingLabel("checklist")} 작성 중
+                                </div>
+                            )}
+                            <TravelCheckList checklist={checklist} setChecklist={setChecklistSynced} />
+                        </div>
+                        <div
+                            className="rounded-xl border-2 transition-colors"
+                            style={editingFrameStyle("itinerary")}
+                            onFocusCapture={() => broadcastPresence("itinerary")}
+                            onBlurCapture={() => broadcastPresence("itinerary", "PRESENCE_CLEAR")}
+                        >
+                            {editingLabel("itinerary") && (
+                                <div className="px-3 pt-2 text-xs font-semibold" style={{ color: activeEditorsByTarget.itinerary?.color }}>
+                                    {editingLabel("itinerary")} 작성 중
+                                </div>
+                            )}
+                            <TravelItinerary
+                                title={title}
+                                setTitle={setTitleSynced}
+                                days={days}
+                                setDays={setDaysSynced}
+                                template={draft.template}
+                                tier={draft.tier}
+                                planId={planId}
+                                onCostSelectionChange={setSelectedCostCells}
+                            />
+                        </div>
                     </div>
 
-                    <div className="w-full shrink-0 lg:w-80 xl:w-96">
+                    <div
+                        className="w-full shrink-0 rounded-xl border-2 transition-colors lg:w-80 xl:w-96"
+                        style={editingFrameStyle("participants")}
+                        onFocusCapture={() => broadcastPresence("participants")}
+                        onBlurCapture={() => broadcastPresence("participants", "PRESENCE_CLEAR")}
+                    >
+                        {editingLabel("participants") && (
+                            <div className="px-3 pt-2 text-xs font-semibold" style={{ color: activeEditorsByTarget.participants?.color }}>
+                                {editingLabel("participants")} 작성 중
+                            </div>
+                        )}
                         <ParticipantsSidebar
                             planId={planId}
                             inviteUrl={inviteUrl}
                             participants={participants}
-                            setParticipants={setParticipants}
+                            setParticipants={setParticipantsSynced}
                             onSave={() => saveCurrentPlan(true)}
+                            onParticipantsSynced={syncAuthoritativeParticipants}
                             currentUserEmail={currentEditorEmail}
                             currentUserName={currentEditorName}
                             routeCalculator={
@@ -657,4 +903,12 @@ function realtimeUrls(planId: string) {
         urls.push(`${protocol}://${host}:8080/ws/plans/${encodedPlanId}`);
     }
     return Array.from(new Set(urls));
+}
+
+function editorColor(value: string) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+        hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+    }
+    return TEAM_COLORS[hash % TEAM_COLORS.length];
 }
