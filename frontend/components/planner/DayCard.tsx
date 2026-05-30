@@ -2,7 +2,15 @@ import React from "react";
 import { Calendar, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { ItineraryActivity, ItineraryDay } from "./TravelItinerary";
 import SortableActivityRow from "@/components/planner/Sortable/SortableActivityRow";
-import { closestCenter, DndContext, DragEndEvent } from "@dnd-kit/core";
+import {
+    closestCenter,
+    DndContext,
+    DragEndEvent,
+    useSensor,
+    useSensors,
+    PointerSensor,
+    KeyboardSensor,
+} from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 
 type ActivityError = { message: string } | null;
@@ -41,6 +49,15 @@ export default function DayCard(props: {
 }) {
     const { day, dayIndex } = props;
     const dayCost = day.activities.reduce((sum, activity) => sum + (activity.cost || 0), 0);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor)
+    );
 
     const handleActivityDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -105,7 +122,7 @@ export default function DayCard(props: {
             </div>
 
             <div className="space-y-3 bg-gradient-to-b from-white to-gray-50 p-3 sm:p-5">
-                <DndContext collisionDetection={closestCenter} onDragEnd={handleActivityDragEnd}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActivityDragEnd}>
                     <SortableContext items={day.activities.map((activity) => activity.id)} strategy={verticalListSortingStrategy}>
                         {day.activities.map((activity, idx) => (
                             <SortableActivityRow
@@ -124,6 +141,8 @@ export default function DayCard(props: {
                                 onClearTimeError={props.onClearTimeError}
                                 paidPlaces={props.paidPlaces}
                                 planId={props.planId}
+                                onReorderActivities={props.onReorderActivities}
+                                totalActivities={day.activities.length}
                             />
                         ))}
                     </SortableContext>
