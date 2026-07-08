@@ -20,7 +20,7 @@ export default function PrimaryButton() {
     const { me } = useAuthStore();
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>("template");
-    const [title, setTitle] = useState("신규 여행 일정표");
+    const [title, setTitle] = useState("새 여행 일정");
     const [template, setTemplate] = useState<TravelPlanTemplate>("basic");
     const [selectedTier, setSelectedTier] = useState<TravelPlanTier>("FREE");
     const [depositorName, setDepositorName] = useState("");
@@ -42,7 +42,7 @@ export default function PrimaryButton() {
 
     const createPlan = async (tier: TravelPlanTier) => {
         const id = generatePlanId();
-        const safeTitle = title.trim() || (template === "spreadsheet" ? "엑셀형 여행 일정표" : "신규 여행 일정표");
+        const safeTitle = title.trim() || (template === "spreadsheet" ? "스프레드시트 여행 일정" : "새 여행 일정");
         const plan = template === "spreadsheet"
             ? createSpreadsheetTravelPlan(id, safeTitle, tier)
             : createEmptyTravelPlan(id, safeTitle, "basic", tier);
@@ -66,7 +66,7 @@ export default function PrimaryButton() {
             close();
             router.push(`/createplan/${plan.id}`);
         } catch (err) {
-            setError(readRequestError(err, "여행 계획 생성에 실패했습니다."));
+            setError(readRequestError(err, "여행 일정을 생성하지 못했습니다."));
         } finally {
             setSubmitting(false);
         }
@@ -75,7 +75,7 @@ export default function PrimaryButton() {
     const submitPaidRequest = async () => {
         if (submitting) return;
         if (!depositorName.trim() || !depositBank.trim() || !accountNumber.trim()) {
-            setError("입금자명, 은행명, 계좌번호를 입력해 주세요.");
+            setError("입금자명, 은행명, 계좌번호를 입력해주세요.");
             return;
         }
         setSubmitting(true);
@@ -102,9 +102,9 @@ export default function PrimaryButton() {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="flex h-[50px] items-center justify-center rounded-[12px] bg-black px-[20px] font-[var(--font-paperlogy)] text-[18px] font-medium text-white transition hover:bg-gray-900"
+                className="flex h-[52px] items-center justify-center rounded-xl bg-gray-950 px-6 font-[var(--font-paperlogy)] text-base font-semibold text-white shadow-lg shadow-gray-950/15 transition hover:-translate-y-0.5 hover:bg-black hover:shadow-xl sm:text-lg"
             >
-                Create
+                여행 만들기
             </button>
 
             {open && (
@@ -112,18 +112,18 @@ export default function PrimaryButton() {
                     <div className="max-h-[92vh] w-full max-w-lg overflow-auto rounded-xl bg-white p-6 shadow-2xl">
                         {step === "template" && (
                             <>
-                                <DialogTitle title="템플릿 선택" description="여행 계획 작성 방식을 선택해 주세요." />
+                                <DialogTitle title="일정 방식 선택" description="처음부터 만들거나 표 형태로 정리할 수 있습니다." />
                                 <PlanNameInput title={title} setTitle={setTitle} />
                                 <TemplateButton
                                     active={template === "basic"}
-                                    title="기본형 템플릿"
-                                    description="체크리스트, Day별 일정, 지도 TSP 경로 패널을 포함합니다."
+                                    title="기본 일정"
+                                    description="날짜별 코스, 체크리스트, 장소 기반 경로 계산을 포함합니다."
                                     onClick={() => setTemplate("basic")}
                                 />
                                 <TemplateButton
                                     active={template === "spreadsheet"}
-                                    title="엑셀형 템플릿"
-                                    description="시간표와 비용 행을 셀 단위로 편집하는 일정표입니다."
+                                    title="표 형식 일정"
+                                    description="시간표와 비용을 셀 단위로 편집하는 방식입니다."
                                     onClick={() => setTemplate("spreadsheet")}
                                 />
                                 <DialogActions onCancel={close} onNext={() => setStep("tier")} nextLabel="다음" />
@@ -132,19 +132,19 @@ export default function PrimaryButton() {
 
                         {step === "tier" && (
                             <>
-                                <DialogTitle title="버전 선택" description="템플릿 ID별로 적용되는 기능 범위를 선택해 주세요." />
+                                <DialogTitle title="버전 선택" description="필요한 기능 범위에 맞춰 선택해주세요." />
                                 <TierButton
                                     active={selectedTier === "FREE"}
                                     title="무료 버전"
                                     price="0원"
-                                    features={["TSP 노드 최대 10개", "Leaflet + 로컬 타일 서버 고정", "기본 위치 검색 및 경로 비교"]}
+                                    features={["TSP 노드 최대 10개", "기본 장소 검색과 경로 비교", "공유 일정 편집"]}
                                     onClick={() => setSelectedTier("FREE")}
                                 />
                                 <TierButton
                                     active={selectedTier === "PENDING_PAID"}
                                     title="유료 버전"
                                     price="3,500원"
-                                    features={["TSP 노드 최대 20개", "Google 장소 검색 연동 준비", "승인된 템플릿 ID에서만 유료 기능 사용"]}
+                                    features={["TSP 노드 최대 20개", "Google 장소 검색 연동 준비", "템플릿별 확장 기능"]}
                                     onClick={() => setSelectedTier("PENDING_PAID")}
                                 />
                                 {error && <ErrorBox message={error} />}
@@ -164,19 +164,16 @@ export default function PrimaryButton() {
 
                         {step === "payment" && (
                             <>
-                                <DialogTitle title="입금 정보 입력" description="관리자가 입금 확인 완료를 누르면 해당 템플릿 ID가 유료 버전으로 승격됩니다." />
+                                <DialogTitle title="입금 정보 입력" description="관리자 확인 후 해당 일정이 유료 버전으로 전환됩니다." />
                                 <div className="mt-5 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
                                     <div>결제 금액: <strong>3,500원</strong></div>
-                                    <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">
-                                        입금 계좌: <strong className="text-gray-900 font-bold">352-0358-5355-13 (농협 윤진영)</strong>
+                                    <div className="mt-2 border-t border-gray-200 pt-2 text-xs text-gray-500">
+                                        입금 계좌: <strong className="font-bold text-gray-900">352-0358-5355-13 농협 손진우</strong>
                                     </div>
                                 </div>
-                                <label className="mt-5 block text-sm font-semibold text-gray-700">입금자명</label>
-                                <input value={depositorName} onChange={(event) => setDepositorName(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
-                                <label className="mt-4 block text-sm font-semibold text-gray-700">은행명</label>
-                                <input value={depositBank} onChange={(event) => setDepositBank(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
-                                <label className="mt-4 block text-sm font-semibold text-gray-700">계좌번호</label>
-                                <input value={accountNumber} onChange={(event) => setAccountNumber(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
+                                <PaymentInput label="입금자명" value={depositorName} onChange={setDepositorName} />
+                                <PaymentInput label="은행명" value={depositBank} onChange={setDepositBank} />
+                                <PaymentInput label="계좌번호" value={accountNumber} onChange={setAccountNumber} />
                                 {error && <ErrorBox message={error} />}
                                 <div className="mt-6 flex justify-end gap-2">
                                     <button type="button" onClick={() => setStep("tier")} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900">이전</button>
@@ -214,8 +211,17 @@ function DialogTitle({ title, description }: { title: string; description: strin
 function PlanNameInput({ title, setTitle }: { title: string; setTitle: (value: string) => void }) {
     return (
         <>
-            <label className="mt-5 block text-sm font-semibold text-gray-700">여행 계획 이름</label>
+            <label className="mt-5 block text-sm font-semibold text-gray-700">여행 이름</label>
             <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
+        </>
+    );
+}
+
+function PaymentInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+    return (
+        <>
+            <label className="mt-4 block text-sm font-semibold text-gray-700">{label}</label>
+            <input value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950" />
         </>
     );
 }

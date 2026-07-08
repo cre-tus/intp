@@ -1,4 +1,4 @@
-import Header from "@/app/createplan/header";
+import Header from "@/app/header";
 import HeroSection from "@/components/planner/HeroSection";
 import RequireAuth  from "@/components/requireAuth/RequireAuth";
 

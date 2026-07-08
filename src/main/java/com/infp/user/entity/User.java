@@ -72,6 +72,21 @@ public class User {
     //리프레시 토큰 만료기간
     private LocalDateTime refreshTokenExpiresAt;
 
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+
+    @Column(name = "terms_agreed_at")
+    private LocalDateTime termsAgreedAt;
+
+    @Column(name = "privacy_notice_confirmed_at")
+    private LocalDateTime privacyNoticeConfirmedAt;
+
+    @Column(name = "terms_version", length = 30)
+    private String termsVersion;
+
+    @Column(name = "privacy_policy_version", length = 30)
+    private String privacyPolicyVersion;
+
     @PrePersist //insert, update 시 자동갱신
     public void prePersist() {
         this.createdAt = LocalDateTime.now();

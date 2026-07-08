@@ -2,6 +2,7 @@ import React from "react";
 import { Calendar, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { ItineraryActivity, ItineraryDay } from "./TravelItinerary";
 import SortableActivityRow from "@/components/planner/Sortable/SortableActivityRow";
+import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 import {
     closestCenter,
     DndContext,
@@ -46,8 +47,10 @@ export default function DayCard(props: {
     dragHandleProps?: DragHandleProps;
     paidPlaces?: boolean;
     planId?: string;
+    currency?: CurrencyRate;
 }) {
     const { day, dayIndex } = props;
+    const currency = props.currency ?? DEFAULT_CURRENCY;
     const dayCost = day.activities.reduce((sum, activity) => sum + (activity.cost || 0), 0);
 
     const sensors = useSensors(
@@ -160,8 +163,7 @@ export default function DayCard(props: {
                 {day.activities.length > 0 && (
                     <div className="-mx-3 mt-3 border-t-2 border-gray-200 bg-gradient-to-r from-transparent to-gray-100 px-3 py-3 text-right sm:-mx-5 sm:px-5">
                         <span className="text-sm font-medium text-gray-600">Day {dayIndex + 1} 총 경비:</span>
-                        <span className="ml-2 text-xl font-bold text-gray-900">{dayCost.toLocaleString()}</span>
-                        <span className="ml-1 text-sm text-gray-600">원</span>
+                        <span className="ml-2 text-xl font-bold text-gray-900">{formatCurrencyAmount(dayCost, currency)}</span>
                     </div>
                 )}
             </div>

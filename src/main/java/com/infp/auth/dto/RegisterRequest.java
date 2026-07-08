@@ -8,6 +8,10 @@ public record RegisterRequest(
         String firstName,
         String lastName,
         String nickname,
-        LocalDate birth
+        LocalDate birth,
+        Boolean termsAgreed,
+        Boolean privacyNoticeConfirmed,
+        String termsVersion,
+        String privacyPolicyVersion
 ) {
 }

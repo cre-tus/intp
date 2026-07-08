@@ -9,6 +9,7 @@ import type { TravelPlanDraft } from "@/lib/travelPlans";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
 import type { PlaceResult } from "@/components/planner/ActivityField/PlaceSerachInput";
 import { createClientId } from "@/lib/ids";
+import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 
 export interface ItineraryActivity {
     id: string;
@@ -88,6 +89,7 @@ export default function TravelItinerary({
     tier = "FREE",
     planId,
     preparationCost = 0,
+    currency = DEFAULT_CURRENCY,
     onCostSelectionChange,
 }: {
     days: ItineraryDay[];
@@ -98,6 +100,7 @@ export default function TravelItinerary({
     tier?: TravelPlanDraft["tier"];
     planId?: string;
     preparationCost?: number;
+    currency?: CurrencyRate;
     onCostSelectionChange?: (cells: SelectedCostCell[]) => void;
 }) {
     const [timeErrors, setTimeErrors] = useState<Record<string, ActivityError>>({});
@@ -485,6 +488,7 @@ export default function TravelItinerary({
                                         onReorderActivities={reorderActivities}
                                         paidPlaces={tier === "PAID"}
                                         planId={planId}
+                                        currency={currency}
                                     />
                                 ))}
                             </SortableContext>
@@ -503,12 +507,11 @@ export default function TravelItinerary({
                                 <div className="text-right">
                                     <span className="text-lg font-medium text-gray-300">전체 총 경비: </span>
                                     <span className="ml-2 text-3xl font-bold tracking-tight text-white">
-                                        {totalCost.toLocaleString()}
+                                        {formatCurrencyAmount(totalCost, currency)}
                                     </span>
-                                    <span className="ml-1 text-lg text-gray-300">원</span>
                                     {preparationCost > 0 && (
                                         <div className="mt-1 text-xs font-medium text-gray-400">
-                                            준비물 {preparationCost.toLocaleString()}원 포함
+                                            준비물 {formatCurrencyAmount(preparationCost, currency)} 포함
                                         </div>
                                     )}
                                 </div>

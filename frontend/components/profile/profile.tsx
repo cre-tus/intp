@@ -1,6 +1,6 @@
 export function ProfileIcon({
         size = 28,
-        color = "#111",
+        color = "currentColor",
         }: {
         size?: number;
         color?: string;

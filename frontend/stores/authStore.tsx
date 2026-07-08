@@ -8,6 +8,9 @@ interface Me {
     email: string;
     nickname?: string;
     role?: "USER" | "ADMIN";
+    firstName?: string;
+    lastName?: string;
+    birth?: string;
 }
 
 

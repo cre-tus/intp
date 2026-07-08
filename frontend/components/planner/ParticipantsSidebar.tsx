@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import type { ReactNode } from "react";
 import { Crown, Copy, Plus, Trash2, UserCog, Users } from "lucide-react";
 import { SaveSection } from "@/components/planner/SaveSection";
+import ExchangeRateWidget from "@/components/planner/ExchangeRateWidget";
+import type { CurrencyRate } from "@/lib/currency";
 import { api } from "@/service/api";
 
 export interface Participant {
@@ -33,6 +35,8 @@ interface ParticipantsSidebarProps {
     inviteUrl?: string;
     onSave?: () => void;
     routeCalculator?: ReactNode;
+    selectedCurrency: CurrencyRate;
+    onCurrencyChange: (currency: CurrencyRate) => void;
     currentUserEmail?: string;
     currentUserName?: string;
     onParticipantsSynced?: (participants: Participant[]) => void;
@@ -45,6 +49,8 @@ export default function ParticipantsSidebar({
     inviteUrl,
     onSave,
     routeCalculator,
+    selectedCurrency,
+    onCurrencyChange,
     currentUserEmail,
     currentUserName,
     onParticipantsSynced,
@@ -328,6 +334,7 @@ export default function ParticipantsSidebar({
                 onSave={onSave}
             />
             {routeCalculator}
+            <ExchangeRateWidget selectedCurrency={selectedCurrency} onCurrencyChange={onCurrencyChange} />
         </div>
     );
 }

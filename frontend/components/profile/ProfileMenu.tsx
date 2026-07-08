@@ -11,6 +11,7 @@ export default function ProfileMenu() {
     const [open, setOpen] = useState(false);
     const panelRef = useRef<HTMLDivElement | null>(null);
     const btnRef = useRef<HTMLButtonElement | null>(null);
+    const roleLabel = me?.role === "ADMIN" ? "관리자" : "유저";
 
     useEffect(() => {
         const onDown = (event: MouseEvent) => {
@@ -50,7 +51,7 @@ export default function ProfileMenu() {
                 onClick={() => setOpen((value) => !value)}
                 aria-haspopup="menu"
                 aria-expanded={open}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white cursor-pointer hover:scale-105 transition"
+                className="profile-btn flex h-10 w-10 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-900 cursor-pointer hover:scale-105 transition"
             >
                 <ProfileIcon size={26} />
             </button>
@@ -64,8 +65,13 @@ export default function ProfileMenu() {
                     }}
                 >
                     <div className="border-b border-gray-100 px-[14px] py-[12px]">
-                        <div className="text-sm font-bold text-gray-900">
-                            {me?.nickname ?? me?.email ?? "User"}
+                        <div className="flex min-w-0 items-baseline gap-1.5 leading-none">
+                            <span className="truncate text-sm font-bold leading-none text-gray-900">
+                                {me?.nickname ?? me?.email ?? "User"}
+                            </span>
+                            <span className="shrink-0 text-xs font-medium leading-none text-gray-400">
+                                {roleLabel}
+                            </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-0.5">{me?.email ?? ""}</div>
                     </div>

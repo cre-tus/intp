@@ -19,6 +19,18 @@ a {
     animation: marquee 12s linear infinite;
 }
 
+.moving-row:hover .moving-wrap,
+.moving-row:focus-within .moving-wrap,
+body:has(.tokyo-recommendation-modal) .moving-wrap {
+    animation-play-state: paused;
+}
+
+.moving-row.is-focused .moving-wrap {
+    animation: none;
+    transform: translateX(var(--moving-focus-x, 0px));
+    transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 /* ========================================================
    Modern UX/UI Premium Dark Mode System
    ======================================================== */
@@ -29,6 +41,13 @@ a {
     --border-color: #e5e7eb;
     --card-bg: #ffffff;
     --card-bg-alt: #f3f4f6;
+    --home-bg: #fbfbfa;
+    --home-card: #ffffff;
+    --home-card-soft: #f9fafb;
+    --home-text: #0f172a;
+    --home-muted: #64748b;
+    --home-border: #e5e7eb;
+    --home-fade-rgb: 251 251 250;
     --font-infp: "YourFontName";
 }
 
@@ -39,8 +58,49 @@ a {
     --border-color: #1e293b; /* Premium slate borders */
     --card-bg: #161b26; /* Deep slate cards */
     --card-bg-alt: #1f2937; /* Lighter slate accents */
+    --home-bg: #080b12;
+    --home-card: #121826;
+    --home-card-soft: #182132;
+    --home-text: #f8fafc;
+    --home-muted: #94a3b8;
+    --home-border: #263244;
+    --home-fade-rgb: 8 11 18;
     
     color-scheme: dark;
+}
+
+.home-surface {
+    background-color: var(--home-bg);
+    color: var(--home-text);
+}
+
+.home-card {
+    background-color: var(--home-card);
+    border-color: var(--home-border);
+}
+
+.home-card-soft {
+    background-color: var(--home-card-soft);
+}
+
+.home-text {
+    color: var(--home-text);
+}
+
+.home-muted {
+    color: var(--home-muted);
+}
+
+.home-border {
+    border-color: var(--home-border);
+}
+
+.home-fade-left {
+    background-image: linear-gradient(to right, rgb(var(--home-fade-rgb)), rgb(var(--home-fade-rgb) / 0));
+}
+
+.home-fade-right {
+    background-image: linear-gradient(to left, rgb(var(--home-fade-rgb)), rgb(var(--home-fade-rgb) / 0));
 }
 
 body {
@@ -119,6 +179,9 @@ body {
     .border-gray-200,
     .border-gray-300 {
         border-color: var(--border-color) !important;
+    }
+    .border-white {
+        border-color: var(--home-border) !important;
     }
     .border-dashed {
         border-style: dashed !important;
@@ -214,6 +277,12 @@ body {
         box-shadow: 0 3px 14px rgba(0,0,0,0.6) !important;
     }
 }
+
+.dark-mode .profile-btn {
+    border-color: #ffffff !important;
+    color: #ffffff !important;
+}
+
 
 /* ========================================================
    Custom Scrollbar & Picker styles

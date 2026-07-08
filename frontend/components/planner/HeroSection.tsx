@@ -7,6 +7,7 @@ import TravelCheckList, { ChecklistItem } from "@/components/planner/TravelCheck
 import TravelItinerary, { ItineraryDay, SelectedCostCell } from "@/components/planner/TravelItinerary";
 import ParticipantsSidebar, { Participant } from "@/components/planner/ParticipantsSidebar";
 import MapRoutePanel from "@/components/planner/MapRoutePanel";
+import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 import { Calculator, CalendarDays, Route, X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import {
@@ -18,6 +19,7 @@ import {
     type TravelPlanDraft,
 } from "@/lib/travelPlans";
 import { createClientId } from "@/lib/ids";
+import { mergeTravelPlans, travelPlansEqual } from "@/lib/travelPlanCrdt";
 
 type RealtimeMessage = {
     type: "PLAN_UPDATED";
@@ -53,6 +55,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const applyingRemoteRef = useRef(false);
     const pendingBroadcastRef = useRef(false);
     const draftRef = useRef<TravelPlanDraft | null>(null);
+    const mergeBaseRef = useRef<TravelPlanDraft | null>(null);
     const dirtyRef = useRef(false);
     const skipNextDirtyMarkRef = useRef(false);
     const realtimeSyncTimerRef = useRef<number | null>(null);
@@ -66,6 +69,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const [participants, setParticipants] = useState<Participant[]>(initialPlan.participants);
     const [days, setDays] = useState<ItineraryDay[]>(initialPlan.days);
     const [selectedCostCells, setSelectedCostCells] = useState<SelectedCostCell[]>([]);
+    const [selectedCurrency, setSelectedCurrency] = useState<CurrencyRate>(DEFAULT_CURRENCY);
     const [routeModalOpen, setRouteModalOpen] = useState(false);
     const [routeDayId, setRouteDayId] = useState(initialPlan.days[0]?.id ?? "");
     const [lastSavedAt, setLastSavedAt] = useState(initialPlan.updatedAt);
@@ -81,8 +85,11 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
 
     useEffect(() => {
         let cancelled = false;
-        setPlanLoading(true);
-        setMissingPlan(false);
+        const resetPlanLoadState = () => {
+            setPlanLoading(true);
+            setMissingPlan(false);
+        };
+        resetPlanLoadState();
         loadTravelPlan(planId)
             .then((loaded) => {
                 if (cancelled) return;
@@ -91,6 +98,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                     return;
                 }
                 const next = loaded ?? createEmptyTravelPlan(planId);
+                mergeBaseRef.current = next;
                 setInitialPlan(next);
                 setTitle(next.title);
                 setChecklist(next.checklist);
@@ -125,6 +133,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const selectedRouteDayId = routeDayId && days.some((day) => day.id === routeDayId)
         ? routeDayId
         : days[0]?.id ?? "";
+    const isAdmin = me?.role === "ADMIN";
 
     useEffect(() => {
         if (!me?.email || participants.length > 0) return;
@@ -248,23 +257,47 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                     }
                     if (message.type !== "PLAN_UPDATED") return;
 
+                    const localPlan = draftRef.current ?? message.plan;
+                    const basePlan = mergeBaseRef.current ?? localPlan;
+                    const mergedPlan = mergeTravelPlans(basePlan, localPlan, message.plan);
+                    const shouldRebroadcastMerge = !travelPlansEqual(mergedPlan, message.plan);
+
                     applyingRemoteRef.current = true;
                     skipNextDirtyMarkRef.current = true;
-                    setTitle(message.plan.title);
-                    setChecklist(message.plan.checklist);
-                    setParticipants(message.plan.participants);
-                    setDays(message.plan.days);
-                    draftRef.current = message.plan;
-                    setInitialPlan(message.plan);
-                    dirtyRef.current = false;
+                    setTitle(mergedPlan.title);
+                    setChecklist(mergedPlan.checklist);
+                    setParticipants(mergedPlan.participants);
+                    setDays(mergedPlan.days);
+                    draftRef.current = mergedPlan;
+                    mergeBaseRef.current = mergedPlan;
+                    setInitialPlan(mergedPlan);
+                    dirtyRef.current = shouldRebroadcastMerge;
                     if (remotePersistTimerRef.current != null) {
                         window.clearTimeout(remotePersistTimerRef.current);
                     }
                     remotePersistTimerRef.current = window.setTimeout(() => {
                         remotePersistTimerRef.current = null;
-                        void saveTravelPlan(message.plan).catch(() => setSyncStatus("원격 저장 반영 실패"));
+                        void saveTravelPlan(mergedPlan)
+                            .then((persisted) => {
+                                draftRef.current = persisted;
+                                mergeBaseRef.current = persisted;
+                                setInitialPlan(persisted);
+                                if (shouldRebroadcastMerge && socketRef.current?.readyState === WebSocket.OPEN) {
+                                    const editor = editorRef.current;
+                                    socketRef.current.send(JSON.stringify({
+                                        type: "PLAN_UPDATED",
+                                        clientId: clientIdRef.current,
+                                        plan: persisted,
+                                        editorName: editor.name,
+                                        editorEmail: editor.email,
+                                        updatedAt: persisted.updatedAt,
+                                    } satisfies RealtimeMessage));
+                                    setSyncStatus("CRDT merge synced");
+                                }
+                            })
+                            .catch(() => setSyncStatus("원격 병합 저장 실패"));
                     }, 500);
-                    setLastSavedAt(message.plan.updatedAt);
+                    setLastSavedAt(mergedPlan.updatedAt);
                     setLastEditorName(message.editorName || message.editorEmail || "다른 사용자");
                     setLastEditorEmail(message.editorEmail ?? "");
                     setSyncStatus(`${message.editorName || "다른 사용자"} 수정 반영됨`);
@@ -297,6 +330,8 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             return;
         }
         dirtyRef.current = false;
+        draftRef.current = persisted;
+        mergeBaseRef.current = persisted;
         setInitialPlan(persisted);
         setLastSavedAt(persisted.updatedAt);
         setLastEditorName(currentEditorName);
@@ -488,6 +523,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             updatedAt: new Date().toISOString(),
         };
         draftRef.current = nextDraft;
+        mergeBaseRef.current = nextDraft;
         dirtyRef.current = false;
         skipNextDirtyMarkRef.current = true;
         setParticipants(nextParticipants);
@@ -496,6 +532,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         void saveTravelPlan(nextDraft)
             .then((persisted) => {
                 draftRef.current = persisted;
+                mergeBaseRef.current = persisted;
                 setInitialPlan(persisted);
                 setLastSavedAt(persisted.updatedAt);
                 setSyncStatus("권한 저장됨");
@@ -642,7 +679,11 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                     {editingLabel("checklist")} 작성 중
                                 </div>
                             )}
-                            <TravelCheckList checklist={checklist} setChecklist={setChecklistSynced} />
+                            <TravelCheckList
+                                checklist={checklist}
+                                setChecklist={setChecklistSynced}
+                                currency={selectedCurrency}
+                            />
                         </div>
                         <div
                             className="rounded-xl border-2 transition-colors"
@@ -663,9 +704,13 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                 template={draft.template}
                                 tier={draft.tier}
                                 planId={planId}
+                                currency={selectedCurrency}
                                 onCostSelectionChange={setSelectedCostCells}
                             />
                         </div>
+                        {draft.template === "spreadsheet" && (
+                            <CurrencyAwareSpreadsheetCostCalculator selectedCells={selectedCostCells} currency={selectedCurrency} />
+                        )}
                     </div>
 
                     <div
@@ -688,19 +733,16 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                             onParticipantsSynced={syncAuthoritativeParticipants}
                             currentUserEmail={currentEditorEmail}
                             currentUserName={currentEditorName}
-                            routeCalculator={
-                                <div className="space-y-3">
-                                    <RouteCalculatorLauncher
-                                        days={days}
-                                        selectedDayId={selectedRouteDayId}
-                                        onSelectDay={setRouteDayId}
-                                        onOpen={() => setRouteModalOpen(true)}
-                                    />
-                                    {draft.template === "spreadsheet" && (
-                                        <SpreadsheetCostCalculator selectedCells={selectedCostCells} />
-                                    )}
-                                </div>
-                            }
+                            selectedCurrency={selectedCurrency}
+                            onCurrencyChange={setSelectedCurrency}
+                            routeCalculator={(
+                                <RouteCalculatorLauncher
+                                    days={days}
+                                    selectedDayId={selectedRouteDayId}
+                                    onSelectDay={setRouteDayId}
+                                    onOpen={() => setRouteModalOpen(true)}
+                                />
+                            )}
                         />
                     </div>
                 </div>
@@ -730,6 +772,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                 initialSelectedDayId={selectedRouteDayId}
                                 paidMaps={draft.tier === "PAID"}
                                 planId={planId}
+                                isAdmin={isAdmin}
                                 forcedOpen
                                 onApplyOptimizedRoute={applyOptimizedRoute}
                             />
@@ -797,7 +840,7 @@ function RouteCalculatorLauncher({
     onOpen: () => void;
 }) {
     return (
-        <div className="space-y-3 border-t-2 border-gray-200 bg-white p-4 sm:p-5">
+        <div className="space-y-3 rounded-xl border-2 border-gray-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center gap-2 text-sm font-bold text-gray-950">
                 <Route className="h-4 w-4" />
                 경로 계산기
@@ -836,6 +879,7 @@ function RouteCalculatorLauncher({
     );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function SpreadsheetCostCalculator({
     selectedCells,
 }: {
@@ -889,6 +933,73 @@ function SpreadsheetCostCalculator({
                 <div className="mt-3 text-right text-lg font-black text-gray-950">
                     {calculatedTotal.toLocaleString()}원
                 </div>
+            </div>
+        </div>
+    );
+}
+
+function CurrencyAwareSpreadsheetCostCalculator({
+    selectedCells,
+    currency,
+}: {
+    selectedCells: SelectedCostCell[];
+    currency: CurrencyRate;
+}) {
+    const [calculatedTotal, setCalculatedTotal] = useState(0);
+    const [notice, setNotice] = useState("");
+
+    const selectedTotal = useMemo(() => {
+        return selectedCells.reduce((sum, cell) => sum + cell.amount, 0);
+    }, [selectedCells]);
+    const selectedPreview = formatCurrencyAmount(selectedTotal, currency);
+    const calculatedPreview = formatCurrencyAmount(calculatedTotal, currency);
+
+    return (
+        <div className="space-y-3 rounded-xl border-2 border-emerald-200 bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-gray-950">
+                    <Calculator className="h-4 w-4" />
+                    비용 계산기
+                </div>
+                <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                    {selectedCells.length}개 선택
+                </span>
+            </div>
+
+            <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-800">
+                표에서 경비 칸을 선택하면, 오른쪽에서 고른 통화 기준으로 환산됩니다.
+            </p>
+
+            <div className="rounded-lg bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs text-gray-500">
+                    <span>선택 {selectedCells.length}개</span>
+                    <span className="text-right">미리보기 {selectedPreview}</span>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => {
+                        if (selectedCells.length === 0) {
+                            setNotice("경비 칸을 선택해주세요.");
+                            return;
+                        }
+                        setNotice("");
+                        setCalculatedTotal(selectedTotal);
+                    }}
+                    className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-gray-950 px-3 py-2 text-sm font-bold text-white transition hover:bg-black"
+                >
+                    비용 계산
+                </button>
+                {notice && (
+                    <p className="mt-2 text-sm font-semibold text-red-600">{notice}</p>
+                )}
+                <div className="mt-3 text-right text-lg font-black text-gray-950">
+                    {calculatedPreview}
+                </div>
+                {currency.unit !== "KRW" && calculatedTotal > 0 && (
+                    <div className="mt-1 text-right text-xs font-semibold text-gray-500">
+                        원화 기준 {calculatedTotal.toLocaleString()}원
+                    </div>
+                )}
             </div>
         </div>
     );

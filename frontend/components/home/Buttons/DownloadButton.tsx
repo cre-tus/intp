@@ -132,16 +132,11 @@ export default function DownloadButton() {
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className="
-                    relative flex h-[50px] items-center justify-center gap-2 rounded-[12px]
-                    border-2 border-[rgba(0,0,0,0.15)] bg-white px-[20px]
-                    font-[var(--font-paperlogy)] text-[18px] font-medium
-                    text-black transition hover:bg-gray-50 focus:outline-none active:scale-[0.98]
-                "
+                className="relative flex h-[52px] items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-6 font-[var(--font-paperlogy)] text-base font-semibold text-gray-950 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-950 hover:shadow-md focus:outline-none active:scale-[0.98] sm:text-lg"
             >
                 <span
                     aria-hidden={true}
-                    className="pointer-events-none absolute inset-0 rounded-[12px] border-2 border-[rgba(0,0,0,0.15)]"
+                    className="pointer-events-none absolute inset-0 rounded-xl border border-white/70"
                 />
                 {/* Modern download icon */}
                 <svg
@@ -154,13 +149,13 @@ export default function DownloadButton() {
                     strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    className="text-black"
+                    className="text-gray-950"
                 >
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                Download
+                자료 다운로드
             </button>
 
             {/* Custom premium dropdown list */}

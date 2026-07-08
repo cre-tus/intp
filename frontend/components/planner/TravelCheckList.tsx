@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Plus, Trash2, CheckSquare, Square } from "lucide-react";
+import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 
 // 체크리스트 항목 타입 정의
 export interface ChecklistItem {
@@ -15,11 +16,13 @@ export interface ChecklistItem {
 interface TravelCheckListProps {
     checklist: ChecklistItem[];
     setChecklist: React.Dispatch<React.SetStateAction<ChecklistItem[]>>;
+    currency?: CurrencyRate;
 }
 
 export default function TravelCheckList({
                                             checklist,
                                             setChecklist,
+                                            currency = DEFAULT_CURRENCY,
                                         }: TravelCheckListProps) {
 
     // ===============================
@@ -173,7 +176,7 @@ export default function TravelCheckList({
                     총 비용 표시
                 =============================== */}
                 <div className="text-right text-sm font-semibold sm:text-base">
-                    총 경비: {totalCost.toLocaleString()}원
+                    총 경비: {formatCurrencyAmount(totalCost, currency)}
                 </div>
             </div>
         </div>

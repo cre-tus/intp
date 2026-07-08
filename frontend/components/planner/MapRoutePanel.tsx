@@ -137,6 +137,7 @@ export default function MapRoutePanel({
     maxNodes = 20,
     paidMaps = false,
     planId,
+    isAdmin = false,
 }: {
     days: ItineraryDay[];
     onApplyOptimizedRoute?: (dayId: string, orderedActivityIds: string[]) => void;
@@ -145,6 +146,7 @@ export default function MapRoutePanel({
     maxNodes?: number;
     paidMaps?: boolean;
     planId?: string;
+    isAdmin?: boolean;
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -601,6 +603,7 @@ export default function MapRoutePanel({
                         <Route className="h-4 w-4" />
                         {loading === "optimize" ? "계산 중" : "TSP 최적화"}
                     </button>
+                    {isAdmin && (
                     <button
                         type="button"
                         onClick={runCompare}
@@ -610,6 +613,7 @@ export default function MapRoutePanel({
                         <GitCompareArrows className="h-4 w-4" />
                         {loading === "compare" ? "분석 중" : "경로 비교"}
                     </button>
+                    )}
                     <button
                         type="button"
                         onClick={applyOptimizedRoute}
@@ -621,9 +625,9 @@ export default function MapRoutePanel({
                 </div>
             </div>
 
-            <div className="grid lg:grid-cols-[minmax(0,1fr)_420px]">
+            <div>
                 <div ref={mapElementRef} className="h-[320px] min-h-[320px] bg-gray-100 sm:h-[420px] sm:min-h-[420px] lg:h-[460px] lg:min-h-[460px]" />
-                <aside className="space-y-4 border-t border-gray-200 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                <aside className="grid gap-4 border-t border-gray-200 p-4 sm:p-5 lg:grid-cols-[320px_minmax(0,1fr)]">
                     <DaySelector days={days} selectedDayId={selectedDay?.id ?? null} onSelect={selectDay} />
                     {disabledReason && <p className="text-sm text-gray-500">{disabledReason}</p>}
                     {error && (
@@ -646,14 +650,15 @@ export default function MapRoutePanel({
                         points={optimized?.order ?? selectedPoints}
                         nearestStopsByPointId={nearestStopsByPointId}
                         loadingStops={loading === "stops"}
+                        isAdmin={isAdmin}
                     />
 
-                    {comparison ? (
-                        <RouteSummary title="비교 결과" result={comparison.optimized} comparison={comparison} />
+                    {isAdmin && comparison ? (
+                        <RouteSummary title="비교 결과" result={comparison.optimized} comparison={comparison} isAdmin={isAdmin} />
                     ) : optimized ? (
                         <>
-                            {benchmark && <RedisBenchmarkSummary benchmark={benchmark} />}
-                            <RouteSummary title="최적 경로" result={optimized} />
+                            {isAdmin && benchmark && <RedisBenchmarkSummary benchmark={benchmark} />}
+                            <RouteSummary title="최적 경로" result={optimized} isAdmin={isAdmin} />
                         </>
                     ) : null}
                 </aside>
@@ -704,10 +709,12 @@ function DayRouteList({
     points,
     nearestStopsByPointId,
     loadingStops,
+    isAdmin,
 }: {
     points: RoutePoint[];
     nearestStopsByPointId: Record<string, TransitStop | undefined>;
     loadingStops: boolean;
+    isAdmin: boolean;
 }) {
     if (points.length === 0) {
         return <p className="text-sm text-gray-500">선택한 Day에 좌표가 있는 장소가 없습니다.</p>;
@@ -735,7 +742,7 @@ function DayRouteList({
                             <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-gray-500">
                                 {point.scheduledTime && <span>{point.scheduledTime}</span>}
                                 <RouteRoleBadge role={point.routeRole} />
-                                <span>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</span>
+                                {isAdmin && <span>{point.lat.toFixed(5)}, {point.lon.toFixed(5)}</span>}
                             </div>
                             <div className="mt-1 flex items-center gap-1 text-xs text-gray-600">
                                 <TrainFront className="h-3.5 w-3.5" />
@@ -755,7 +762,7 @@ function RedisBenchmarkSummary({ benchmark }: { benchmark: BenchmarkResult }) {
     const delta = Math.max(0, benchmark.savedMillis);
 
     return (
-        <div className="space-y-3 border-t border-gray-200 pt-4">
+        <div className="space-y-3 border-t border-gray-200 pt-4 lg:col-span-2">
             <div className="flex items-center justify-between gap-3">
                 <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900">
                     <Database className="h-4 w-4" />
@@ -782,19 +789,20 @@ function RedisBenchmarkSummary({ benchmark }: { benchmark: BenchmarkResult }) {
     );
 }
 
-function RouteSummary({ title, result, comparison }: {
+function RouteSummary({ title, result, comparison, isAdmin }: {
     title: string;
     result: RouteResult;
     comparison?: CompareResult;
+    isAdmin: boolean;
 }) {
     return (
-        <div className="space-y-4 border-t border-gray-200 pt-4">
+        <div className="space-y-4 border-t border-gray-200 pt-4 lg:col-span-2">
             <div>
                 <h3 className="text-sm font-bold text-gray-900">{title}</h3>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                     <Metric label="거리" value={`${result.totalDistanceKm.toLocaleString()} km`} />
                     <Metric label="예상 시간" value={`${result.totalMinutes}분`} />
-                    <Metric label="계산 시간" value={`${result.calculationMillis} ms`} />
+                    {isAdmin && <Metric label="계산 시간" value={`${result.calculationMillis} ms`} />}
                     <Metric label="목적지" value={`${result.order.length}개`} />
                 </div>
             </div>
@@ -844,8 +852,8 @@ function RouteSummary({ title, result, comparison }: {
                 ))}
             </div>
 
-            <CostMatrixTable result={result} />
-            <p className="text-xs text-gray-400">{result.costModel}</p>
+            {isAdmin && <CostMatrixTable result={result} />}
+            {isAdmin && <p className="text-xs text-gray-400">{result.costModel}</p>}
         </div>
     );
 }

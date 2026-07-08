@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 
-const TEXTS = ["푸드 트립", "인기 있는 여행지", "나만의 여행 계획", "개발 중..."];
+const TEXTS = [
+    "장소를 담고, 날짜를 나누고, 친구와 바로 수정하세요.",
+    "숙소부터 이동 동선까지 한 화면에서 정리하세요.",
+    "초대 링크 하나로 같은 여행을 함께 준비합니다.",
+];
 
 export default function TypingText() {
     const [textIndex, setTextIndex] = useState(0);
@@ -13,29 +17,29 @@ export default function TypingText() {
         const currentText = TEXTS[textIndex];
 
         if (charIndex < currentText.length) {
-            const typingTimer = setTimeout(() => {
+            const typingTimer = window.setTimeout(() => {
                 setDisplayText((prev) => prev + currentText[charIndex]);
                 setCharIndex((prev) => prev + 1);
-            }, 80);
+            }, 55);
 
-            return () => clearTimeout(typingTimer);
+            return () => window.clearTimeout(typingTimer);
         }
 
-        const waitTimer = setTimeout(() => {
+        const waitTimer = window.setTimeout(() => {
             setDisplayText("");
             setCharIndex(0);
             setTextIndex((prev) => (prev + 1) % TEXTS.length);
-        }, 2000);
+        }, 1800);
 
-        return () => clearTimeout(waitTimer);
+        return () => window.clearTimeout(waitTimer);
     }, [charIndex, textIndex]);
 
     return (
-        <p className="text-center text-[24px] text-[rgba(0,0,0,0.55)] leading-[1.45]">
+        <p className="home-muted mx-auto mt-6 min-h-[34px] max-w-2xl break-keep text-center text-lg leading-[1.5] sm:text-xl lg:mx-0 lg:text-left">
             {displayText}
-            <span className="inline-block w-[1ch] animate-[blink_1s_step-start_infinite]">
-        |
-      </span>
+            <span className="home-text ml-0.5 inline-block w-[1ch] animate-[blink_1s_step-start_infinite]">
+                |
+            </span>
         </p>
     );
 }

@@ -41,9 +41,11 @@ export default function MyPage() {
     const sortedSharedPlans = useSortedPlans(sharedPlans);
     const visiblePlans = showAllPlans ? sortedPlans : sortedPlans.slice(0, 3);
     const visibleSharedPlans = showAllSharedPlans ? sortedSharedPlans : sortedSharedPlans.slice(0, 3);
+    const roleLabel = me?.role === "ADMIN" ? "관리자" : "유저";
+    const fullName = [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "-";
 
     const removePlan = async (plan: TravelPlanIndexItem) => {
-        if (!window.confirm(`"${plan.title}" 계획표를 삭제할까요?`)) return;
+        if (!window.confirm(`"${plan.title}" 계획을 삭제할까요?`)) return;
         try {
             await deleteTravelPlan(plan.id);
         } catch (error) {
@@ -63,52 +65,57 @@ export default function MyPage() {
                         <div className="h-24 bg-gradient-to-r from-slate-900 to-slate-600" />
                         <div className="px-6 pb-6">
                             <div className="-mt-10 flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-black text-2xl font-black text-white">
-                                {(me?.nickname || me?.email || "김").slice(0, 1)}
+                                {(me?.nickname || me?.email || "인").slice(0, 1)}
                             </div>
                             <div className="mt-4">
-                                <h1 className="text-2xl font-black text-gray-950">{me?.nickname || "김인팁"}</h1>
-                                <p className="mt-1 text-sm text-gray-500">여행을 사랑하는 사람</p>
+                                <div className="flex items-baseline gap-2">
+                                    <h1 className="text-2xl font-bold text-gray-950">{me?.nickname || "인팁러"}</h1>
+                                    <span className="text-sm font-medium text-gray-400">{roleLabel}</span>
+                                </div>
+                                <p className="mt-1 text-sm text-gray-500">여행을 차분하게 설계하는 사람</p>
                             </div>
                             <div className="mt-6 grid grid-cols-3 overflow-hidden rounded-2xl border border-gray-100">
-                                <Stat value={plans.length} label="총 계획표" />
-                                <Stat value={0} label="팔로워 수" />
-                                <Stat value={0} label="팔로우 수" />
+                                <Stat value={plans.length} label="내 계획" />
+                                <Stat value={sharedPlans.length} label="참여 계획" />
+                                <Stat value={plans.length + sharedPlans.length} label="전체" />
                             </div>
                         </div>
                     </section>
 
                     <SectionTitle title="계정 정보" />
                     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                        <InfoRow label="이름" value={me?.nickname || "김인팁"} />
-                        <InfoRow label="이메일" value={me?.email || "inteam@example.com"} />
-                        <InfoRow label="전화번호" value="010-1234-5678" />
+                        <InfoRow label="성명" value={fullName} />
+                        <InfoRow label="닉네임" value={me?.nickname || "-"} />
+                        <InfoRow label="이메일" value={me?.email || "-"} />
+                        <InfoRow label="생년월일" value={me?.birth || "-"} />
+                        <InfoRow label="권한" value={roleLabel} />
                     </div>
 
                     <PlanSection
-                        title="여행 계획표"
+                        title="내 여행 계획"
                         plans={visiblePlans}
                         totalCount={sortedPlans.length}
                         showAll={showAllPlans}
                         onToggleShowAll={() => setShowAllPlans((value) => !value)}
-                        emptyText="아직 만든 계획표가 없습니다."
+                        emptyText="아직 만든 계획이 없습니다."
                         emptyAction
                         onRemove={(plan) => void removePlan(plan)}
                     />
 
                     <PlanSection
-                        title="참여 가능한 계획표"
+                        title="참여 가능한 계획"
                         plans={visibleSharedPlans}
                         totalCount={sortedSharedPlans.length}
                         showAll={showAllSharedPlans}
                         onToggleShowAll={() => setShowAllSharedPlans((value) => !value)}
-                        emptyText="참여 가능한 계획표가 없습니다."
+                        emptyText="참여 가능한 계획이 없습니다."
                     />
 
                     <SectionTitle title="설정" />
                     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
                         <SettingRow
                             icon={<Bell className="h-4 w-4" />}
-                            label="푸시 알림"
+                            label="알림"
                             trailing={<span className="h-6 w-11 rounded-full bg-black p-1"><span className="ml-auto block h-4 w-4 rounded-full bg-white" /></span>}
                         />
                         <SettingRow icon={<Globe2 className="h-4 w-4" />} label="언어" trailing={<span className="text-sm text-gray-400">한국어</span>} />
@@ -132,7 +139,7 @@ function readDeleteError(error: unknown) {
         const response = (error as { response?: { data?: unknown } }).response;
         if (typeof response?.data === "string" && response.data.trim()) return response.data;
     }
-    return "계획표를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    return "계획을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.";
 }
 
 function PlanSection({
@@ -224,12 +231,12 @@ function PlanRow({ plan, onRemove }: { plan: TravelPlanIndexItem; onRemove?: () 
                 <div className="mt-1 text-xs text-gray-500">{new Date(plan.updatedAt).toLocaleDateString("ko-KR")}</div>
             </Link>
             <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500" title="참여자 수">
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500" title="참여자">
                     <Users className="h-4 w-4" />
                     {plan.participantCount}
                 </span>
                 {onRemove && (
-                    <button type="button" onClick={onRemove} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600" aria-label="계획표 삭제">
+                    <button type="button" onClick={onRemove} className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600" aria-label="계획 삭제">
                         <Trash2 className="h-4 w-4" />
                     </button>
                 )}
@@ -251,7 +258,7 @@ function PlanBadge({ children, tone = "neutral" }: { children: React.ReactNode; 
 }
 
 function templateLabel(template: TravelPlanIndexItem["template"]) {
-    return template === "spreadsheet" ? "엑셀형 템플릿" : "기본형 템플릿";
+    return template === "spreadsheet" ? "스프레드시트" : "기본 템플릿";
 }
 
 function tierLabel(tier: TravelPlanIndexItem["tier"]) {

@@ -6,6 +6,7 @@ import com.infp.auth.dto.MeResponse;
 import com.infp.auth.dto.RegisterRequest;
 import com.infp.auth.jwt.JwtAuthFilter;
 import com.infp.auth.service.AuthService;
+import com.infp.user.repository.UserRepository;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final UserRepository userRepository;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserRepository userRepository) {
         this.authService = authService;
+        this.userRepository = userRepository;
     }
 
     @PostMapping("/login")
@@ -71,6 +74,46 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
+    @PostMapping("/refresh")
+    public ResponseEntity<Void> refresh(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse res
+    ) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        final AuthService.TokenPair pair;
+        try {
+            pair = authService.refresh(refreshToken);
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(401).build();
+        }
+
+        ResponseCookie accessCookie = ResponseCookie.from("accessToken", pair.accessToken())
+                .httpOnly(true)
+                .secure(false)
+                .sameSite("Lax")
+                .path("/")
+                .maxAge(60 * 60)
+                .build();
+
+        ResponseCookie.ResponseCookieBuilder refreshBuilder = ResponseCookie.from("refreshToken", pair.refreshToken())
+                .httpOnly(true)
+                .secure(false)
+                .sameSite("Lax")
+                .path("/");
+
+        ResponseCookie refreshCookie = pair.rememberMe()
+                ? refreshBuilder.maxAge(60L * 60 * 24 * 30).build()
+                : refreshBuilder.build();
+
+        res.addHeader("Set-Cookie", accessCookie.toString());
+        res.addHeader("Set-Cookie", refreshCookie.toString());
+
+        return ResponseEntity.ok().build();
+    }
+
     @GetMapping("/check-email")
     public ResponseEntity<EmailCheckResponse> checkEmail(@RequestParam String email) {
         String normalizedEmail = email == null ? "" : email.trim().toLowerCase();
@@ -114,14 +157,19 @@ public class AuthController {
         }
 
         // 로그인된 사용자 정보 반환
-        return ResponseEntity.ok(
-                new MeResponse(
-                        principal.userId(),
-                        principal.email(),
-                        principal.nickname(),
-                        principal.role()
-                )
-        );
+        return userRepository.findById(principal.userId())
+                .map(user -> ResponseEntity.ok(
+                        new MeResponse(
+                                user.getId(),
+                                user.getEmail(),
+                                user.getNickname(),
+                                user.getRole().name(),
+                                user.getFirstName(),
+                                user.getLastName(),
+                                user.getBirth() == null ? null : user.getBirth().toString()
+                        )
+                ))
+                .orElseGet(() -> ResponseEntity.status(401).build());
     }
 
     //로그아웃 시 쿠키 삭제

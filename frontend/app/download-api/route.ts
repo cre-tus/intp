@@ -3,6 +3,11 @@ import fs from "fs";
 import path from "path";
 
 export async function GET(request: NextRequest) {
+    const admin = await isAdminRequest(request);
+    if (!admin) {
+        return NextResponse.json({ error: "Admin only" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const file = searchParams.get("file");
 
@@ -85,4 +90,35 @@ export async function GET(request: NextRequest) {
     } catch (err) {
         return NextResponse.json({ error: "Failed to read directories" }, { status: 500 });
     }
+}
+
+type MeResponse = {
+    role?: string;
+};
+
+async function isAdminRequest(request: NextRequest) {
+    const cookie = request.headers.get("cookie");
+    if (!cookie) return false;
+
+    const candidates = [
+        process.env.BACKEND_INTERNAL_URL,
+        "http://backend:8080",
+        "http://localhost:8080",
+    ].filter((value): value is string => Boolean(value));
+
+    for (const baseUrl of candidates) {
+        try {
+            const response = await fetch(`${baseUrl}/api/auth/me`, {
+                headers: { cookie },
+                cache: "no-store",
+            });
+            if (!response.ok) continue;
+            const me = await response.json() as MeResponse;
+            return me.role === "ADMIN";
+        } catch {
+            // Try the next backend address. Docker uses the service name; local dev often uses localhost.
+        }
+    }
+
+    return false;
 }

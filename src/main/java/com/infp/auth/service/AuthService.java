@@ -15,9 +15,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
+    private static final String CURRENT_TERMS_VERSION = "2026-07-08";
+    private static final String CURRENT_PRIVACY_POLICY_VERSION = "2026-07-08";
+    private static final Pattern PASSWORD_PATTERN =
+            Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d\\s]).{8,64}$");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -50,7 +55,7 @@ public class AuthService {
 
         // Step 4) 토큰 2개 발급
         String accessToken  = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail());
-        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail());
+        String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail(), req.rememberMe());
 
         //  Step 5) refresh는 DB에 "SHA-256 해시"로 저장 + 만료 저장
         // (BCrypt encode(refreshToken) 금지: JWT 길이 때문에 72 bytes 제한 터짐)
@@ -58,7 +63,7 @@ public class AuthService {
         user.setRefreshTokenExpiresAt(LocalDateTime.now().plusDays(30));
         userRepository.save(user);
 
-        return new TokenPair(accessToken, refreshToken);
+        return new TokenPair(accessToken, refreshToken, req.rememberMe());
     }
 
     public boolean isEmailAvailable(String email) {
@@ -74,8 +79,12 @@ public class AuthService {
         if (email.isBlank()) {
             throw new IllegalArgumentException("이메일을 입력해주세요.");
         }
-        if (req.password() == null || req.password().length() < 4) {
-            throw new IllegalArgumentException("비밀번호는 4자 이상이어야 합니다.");
+        validatePassword(req.password(), email);
+        if (!Boolean.TRUE.equals(req.termsAgreed())) {
+            throw new IllegalArgumentException("서비스 이용약관 확인이 필요합니다.");
+        }
+        if (!Boolean.TRUE.equals(req.privacyNoticeConfirmed())) {
+            throw new IllegalArgumentException("개인정보 처리 안내 확인이 필요합니다.");
         }
         if (isBlank(req.firstName()) || isBlank(req.lastName())) {
             throw new IllegalArgumentException("성명 입력은 필수입니다.");
@@ -97,6 +106,11 @@ public class AuthService {
         user.setLastName(req.lastName().trim());
         user.setNickname(req.nickname().trim());
         user.setBirth(req.birth());
+        user.setPasswordChangedAt(LocalDateTime.now());
+        user.setTermsAgreedAt(LocalDateTime.now());
+        user.setPrivacyNoticeConfirmedAt(LocalDateTime.now());
+        user.setTermsVersion(blankToDefault(req.termsVersion(), CURRENT_TERMS_VERSION));
+        user.setPrivacyPolicyVersion(blankToDefault(req.privacyPolicyVersion(), CURRENT_PRIVACY_POLICY_VERSION));
         user.setStatus(UserStatus.ACTIVE);
         user.setRole(UserRole.USER);
         userRepository.save(user);
@@ -115,6 +129,7 @@ public class AuthService {
 
         // Step 2) userId 추출
         Long userId = ((Number) claims.get("userId")).longValue();
+        boolean rememberMe = Boolean.TRUE.equals(claims.get("rememberMe", Boolean.class));
 
         // Step 3) 유저 조회
         User user = userRepository.findById(userId)
@@ -135,17 +150,17 @@ public class AuthService {
 
         // Step 6) 새 access + 새 refresh 발급 (회전)
         String newAccess  = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail());
-        String newRefresh = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail());
+        String newRefresh = jwtTokenProvider.createRefreshToken(user.getId(), user.getEmail(), rememberMe);
 
         //  Step 7) DB refresh 갱신도 SHA-256 해시로 저장
         user.setRefreshTokenHash(sha256Hex(newRefresh));
         user.setRefreshTokenExpiresAt(LocalDateTime.now().plusDays(30));
         userRepository.save(user);
 
-        return new TokenPair(newAccess, newRefresh);
+        return new TokenPair(newAccess, newRefresh, rememberMe);
     }
 
-    public record TokenPair(String accessToken, String refreshToken) {}
+    public record TokenPair(String accessToken, String refreshToken, boolean rememberMe) {}
 
     public void logoutByRefreshToken(String refreshToken) {
 
@@ -183,7 +198,21 @@ public class AuthService {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 
+    private void validatePassword(String password, String email) {
+        if (password == null || !PASSWORD_PATTERN.matcher(password).matches()) {
+            throw new IllegalArgumentException("비밀번호는 8~64자이며 영문, 숫자, 특수문자를 각각 1개 이상 포함해야 합니다.");
+        }
+        String emailId = email.contains("@") ? email.substring(0, email.indexOf("@")) : email;
+        if (!emailId.isBlank() && password.toLowerCase(Locale.ROOT).contains(emailId.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("비밀번호에는 이메일 아이디를 포함할 수 없습니다.");
+        }
+    }
+
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private String blankToDefault(String value, String fallback) {
+        return value == null || value.trim().isBlank() ? fallback : value.trim();
     }
 }

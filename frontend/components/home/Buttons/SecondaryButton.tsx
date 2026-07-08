@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function SecondaryButton() {
     const router = useRouter();
@@ -13,7 +13,7 @@ export default function SecondaryButton() {
     const joinPlan = async () => {
         const planId = extractPlanId(inviteValue);
         if (!planId) {
-            setError("초대 링크 또는 계획 ID를 입력해주세요.");
+            setError("초대 링크 또는 일정 ID를 입력해주세요.");
             return;
         }
 
@@ -24,13 +24,13 @@ export default function SecondaryButton() {
                 credentials: "include",
             });
             if (!response.ok) {
-                setError("존재하지 않거나 접근 권한이 없는 계획 ID입니다.");
+                setError("존재하지 않거나 접근 권한이 없는 일정입니다.");
                 return;
             }
             setOpen(false);
             router.push(`/createplan/${encodeURIComponent(planId)}`);
         } catch {
-            setError("계획표를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.");
+            setError("일정을 확인하지 못했습니다. 잠시 후 다시 시도해주세요.");
         } finally {
             setChecking(false);
         }
@@ -45,36 +45,27 @@ export default function SecondaryButton() {
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="
-                    relative flex h-[50px] items-center justify-center rounded-[12px]
-                    border-2 border-[rgba(0,0,0,0.15)] bg-white px-[20px]
-                    font-[var(--font-paperlogy)] text-[18px] font-medium
-                    text-black
-                "
+                className="flex h-[52px] items-center justify-center rounded-xl border border-gray-300 bg-white px-6 font-[var(--font-paperlogy)] text-base font-semibold text-gray-950 shadow-sm transition hover:-translate-y-0.5 hover:border-gray-950 hover:shadow-md sm:text-lg"
             >
-                <span
-                    aria-hidden={true}
-                    className="pointer-events-none absolute inset-0 rounded-[12px] border-2 border-[rgba(0,0,0,0.15)]"
-                />
-                Join
+                초대 참여
             </button>
 
             {open && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
                     <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
-                        <div className="text-xl font-bold text-gray-950">여행 계획 참여</div>
+                        <div className="text-xl font-bold text-gray-950">여행 일정 참여</div>
                         <p className="mt-1 text-sm text-gray-500">
-                            DB에 저장된 계획 ID나 초대 링크만 입장할 수 있습니다.
+                            초대 링크나 일정 ID를 입력하면 공유된 일정으로 이동합니다.
                         </p>
 
                         <label className="mt-5 block text-sm font-semibold text-gray-700">
-                            초대 링크 또는 계획 ID
+                            초대 링크 또는 일정 ID
                         </label>
                         <input
                             value={inviteValue}
                             onChange={(event) => setInviteValue(event.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="https://tuk-intp.kro.kr/createplan/... 또는 계획 ID"
+                            placeholder="https://tuk-intp.kro.kr/createplan/... 또는 일정 ID"
                             className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-gray-950 focus:outline-none focus:ring-2 focus:ring-gray-950"
                         />
                         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -93,7 +84,7 @@ export default function SecondaryButton() {
                                 disabled={checking}
                                 className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white disabled:cursor-wait disabled:bg-gray-400"
                             >
-                                {checking ? "확인 중" : "참여"}
+                                {checking ? "확인 중..." : "참여"}
                             </button>
                         </div>
                     </div>
