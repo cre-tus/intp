@@ -92,7 +92,7 @@ export default function DayCard(props: {
                     type="text"
                     value={day.dayTitle}
                     onChange={(event) => props.onUpdateDayTitle(day.id, event.target.value)}
-                    className="z-10 min-w-0 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+                    className="planner-day-title-input z-10 min-w-0 rounded-lg border-2 border-white/20 bg-white/10 px-3 py-2 font-semibold text-white backdrop-blur-sm transition-all placeholder-white/60 focus:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
                 />
 
                 <div className="z-10 flex min-w-0 items-center gap-2">
@@ -110,7 +110,7 @@ export default function DayCard(props: {
                         type="date"
                         value={day.date}
                         onChange={(event) => props.onUpdateDayDate(day.id, event.target.value)}
-                        className="no-date-picker min-w-0 flex-1 bg-transparent text-white placeholder-white/60 focus:outline-none"
+                        className="planner-inline-input no-date-picker min-w-0 flex-1 bg-transparent text-white placeholder-white/60 focus:outline-none"
                     />
                 </div>
 
@@ -144,6 +144,7 @@ export default function DayCard(props: {
                                 onClearTimeError={props.onClearTimeError}
                                 paidPlaces={props.paidPlaces}
                                 planId={props.planId}
+                                searchOrigin={activityToPlaceOrigin(day.activities[idx - 1])}
                                 onReorderActivities={props.onReorderActivities}
                                 totalActivities={day.activities.length}
                             />
@@ -169,4 +170,13 @@ export default function DayCard(props: {
             </div>
         </div>
     );
+}
+
+function activityToPlaceOrigin(activity?: ItineraryActivity) {
+    if (!activity || !Number.isFinite(activity.lat) || !Number.isFinite(activity.lon)) return null;
+    return {
+        name: activity.location || activity.activity || undefined,
+        lat: activity.lat as number,
+        lon: activity.lon as number,
+    };
 }

@@ -6,6 +6,7 @@ import ActivityField from "@/components/planner/ActivityField/ActivityField";
 import CostField from "@/components/planner/ActivityField/CostField";
 import DeleteButton from "@/components/planner/ActivityField/DeleteButton";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
+import type { PlaceSearchOrigin } from "@/components/planner/ActivityField/PlaceSerachInput";
 import { Pin, ChevronUp, ChevronDown } from "lucide-react";
 
 type ActivityError = { message: string } | null;
@@ -30,6 +31,7 @@ export default function ActivityRow(props: {
     dragHandleProps?: DragHandleProps;
     paidPlaces?: boolean;
     planId?: string;
+    searchOrigin?: PlaceSearchOrigin | null;
     onReorderActivities?: (dayId: string, oldIndex: number, newIndex: number) => void;
     totalActivities?: number;
 }) {
@@ -54,7 +56,7 @@ export default function ActivityRow(props: {
     }, [menuOpen]);
 
     return (
-        <div className="group grid min-w-0 gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md sm:grid-cols-[auto_minmax(0,130px)_minmax(0,1fr)_minmax(0,140px)_minmax(0,1fr)_minmax(0,120px)_auto] sm:items-center">
+        <div className="group grid min-w-0 gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-all hover:border-gray-900 hover:shadow-md sm:grid-cols-[auto_minmax(0,150px)_minmax(0,1fr)_minmax(0,140px)_minmax(0,1fr)_minmax(0,120px)_auto] sm:items-center">
             <div className="relative flex-shrink-0">
                 <button
                     type="button"
@@ -153,12 +155,12 @@ export default function ActivityRow(props: {
 
             <LocationField value={activity.location} onOpen={() => setPlaceOpen(true)} />
 
-            <div className="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                <Pin className="h-4 w-4 flex-shrink-0 text-gray-600" />
+            <div className="planner-route-field flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                <Pin className="planner-field-icon h-4 w-4 flex-shrink-0 text-gray-600" />
                 <select
                     value={activity.routeRole ?? "NONE"}
                     onChange={(event) => props.onChangeField("routeRole", event.target.value)}
-                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
+                    className="planner-inline-select min-w-0 flex-1 bg-transparent text-sm font-medium text-gray-800 focus:outline-none"
                     title="경로 고정"
                 >
                     <option value="NONE">일반</option>
@@ -175,6 +177,7 @@ export default function ActivityRow(props: {
                 initialQuery={activity.location}
                 paidPlaces={props.paidPlaces}
                 planId={props.planId}
+                origin={props.searchOrigin}
                 onSelect={(place) => {
                     props.onChangeField("location", place.title);
                     props.onChangeField("placeId", place.id);

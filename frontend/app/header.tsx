@@ -19,12 +19,15 @@ export default function Header() {
                 <div className="shrink-0 scale-75 sm:scale-100">
                     <HeaderLogo />
                 </div>
-                <span className="home-text truncate font-[var(--font-paperlogy)] text-2xl font-semibold leading-none sm:text-4xl">
+                <span className="home-text truncate font-[var(--font-paperlogy)] text-2xl font-bold leading-none sm:text-4xl">
                     인팁 : INTP
                 </span>
             </Link>
 
             <nav className="flex shrink-0 items-center gap-3 sm:gap-7">
+                <Link href="/community" className="home-text text-sm font-semibold transition opacity-90 hover:opacity-60 sm:text-base">
+                    커뮤니티
+                </Link>
                 {isLoggedIn === null && <span className="home-muted text-sm">...</span>}
                 {isLoggedIn === false && (
                     <Link href="/login" className="home-text text-sm font-semibold transition opacity-90 hover:opacity-60 sm:text-base">

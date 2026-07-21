@@ -1,5 +1,6 @@
 import HeroSection from "@/components/home/HeroSection";
 import Header from "@/app/header";
+import KlookAffiliateWidget from "@/components/ads/KlookAffiliateWidget";
 import type { CSSProperties } from "react";
 
 export default function Home() {
@@ -17,18 +18,16 @@ export default function Home() {
 
 function AdSlot({ side }: { side: "left" | "right" }) {
     const isLeft = side === "left";
-    const offset = "max(48px, calc((100vw - 1280px) / 2 - 170px))";
+    const offset = "max(24px, calc((100vw - 1280px) / 2 - 196px))";
     const positionStyle: CSSProperties = isLeft ? { left: offset } : { right: offset };
 
     return (
         <aside
-            className="home-card pointer-events-none fixed top-1/2 z-20 hidden h-[70vh] max-h-[760px] min-h-[560px] w-[120px] -translate-y-1/2 rounded-xl border border-dashed p-3 text-center text-xs font-semibold shadow-sm backdrop-blur xl:block 2xl:w-[150px]"
+            className="fixed top-1/2 z-20 hidden h-[600px] w-[160px] -translate-y-1/2 overflow-hidden rounded-xl shadow-sm [@media(min-width:1720px)]:block"
             style={positionStyle}
             aria-label={`${isLeft ? "왼쪽" : "오른쪽"} 광고 배너 영역`}
         >
-            <div className="home-card-soft home-muted flex h-full items-center justify-center rounded-lg">
-                광고 배너
-            </div>
+            <KlookAffiliateWidget />
         </aside>
     );
 }

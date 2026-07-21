@@ -1,0 +1,4 @@
+torch>=2.3.0
+numpy>=1.26.0
+requests>=2.31.0
+pymysql>=1.1.0

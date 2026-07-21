@@ -6,6 +6,7 @@ import { Crown, Copy, Plus, Trash2, UserCog, Users } from "lucide-react";
 import { SaveSection } from "@/components/planner/SaveSection";
 import ExchangeRateWidget from "@/components/planner/ExchangeRateWidget";
 import type { CurrencyRate } from "@/lib/currency";
+import type { TravelCountryCode } from "@/lib/travelPlans";
 import { api } from "@/service/api";
 
 export interface Participant {
@@ -27,6 +28,10 @@ type TravelPlanRoleResponse = {
 };
 
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6", "#f59e0b", "#06b6d4"];
+const countryOptions = [
+    { value: "KR", label: "대한민국" },
+    { value: "JP", label: "일본" },
+] satisfies { value: TravelCountryCode; label: string }[];
 
 interface ParticipantsSidebarProps {
     participants: Participant[];
@@ -37,8 +42,9 @@ interface ParticipantsSidebarProps {
     routeCalculator?: ReactNode;
     selectedCurrency: CurrencyRate;
     onCurrencyChange: (currency: CurrencyRate) => void;
+    countryCode: TravelCountryCode;
+    onCountryCodeChange: (countryCode: TravelCountryCode) => void;
     currentUserEmail?: string;
-    currentUserName?: string;
     onParticipantsSynced?: (participants: Participant[]) => void;
 }
 
@@ -51,8 +57,9 @@ export default function ParticipantsSidebar({
     routeCalculator,
     selectedCurrency,
     onCurrencyChange,
+    countryCode,
+    onCountryCodeChange,
     currentUserEmail,
-    currentUserName,
     onParticipantsSynced,
 }: ParticipantsSidebarProps) {
     const [newParticipantEmail, setNewParticipantEmail] = useState("");
@@ -193,6 +200,24 @@ export default function ParticipantsSidebar({
             </div>
 
             <div className="max-h-none space-y-4 overflow-y-visible overflow-x-hidden p-4 sm:p-5">
+                <div className="rounded-lg border border-gray-200 bg-white p-3">
+                    <label className="block text-xs font-semibold text-gray-500" htmlFor="travel-country-select">
+                        여행 국가
+                    </label>
+                    <select
+                        id="travel-country-select"
+                        value={countryCode}
+                        onChange={(event) => onCountryCodeChange(event.target.value as TravelCountryCode)}
+                        className="mt-2 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-900 focus:border-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900/10"
+                    >
+                        {countryOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                                {option.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
                     <div className="text-xs font-semibold text-gray-500">초대 링크</div>
                     <div className="mt-1 truncate text-xs text-gray-700">{inviteUrl || planId || "계획 생성 후 사용 가능"}</div>
@@ -206,16 +231,6 @@ export default function ParticipantsSidebar({
                         <Copy className="h-4 w-4" />
                         링크 복사
                     </button>
-                </div>
-
-                <div className="rounded-lg border border-gray-200 bg-white p-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-500">
-                        <Crown className="h-3.5 w-3.5" />
-                        오너: {owner?.name || currentUserName || "사용자"}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                        {isOwner ? "참여자 추가, 삭제, 오너 넘기기가 가능합니다." : "오너만 참여자를 관리할 수 있습니다."}
-                    </div>
                 </div>
 
                 <div className="space-y-2">

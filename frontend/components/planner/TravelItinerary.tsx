@@ -3,11 +3,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import SortableDayCard from "@/components/planner/Sortable/SortableDayCard";
 import { closestCenter, DndContext, DragEndEvent } from "@dnd-kit/core";
-import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { FileSpreadsheet, Plus, Trash2 } from "lucide-react";
-import type { TravelPlanDraft } from "@/lib/travelPlans";
+import { arrayMove, rectSortingStrategy, SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { CalendarDays, Clock, FileSpreadsheet, GripVertical, MapPin, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import type { TravelCountryCode, TravelPlanDraft } from "@/lib/travelPlans";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
-import type { PlaceResult } from "@/components/planner/ActivityField/PlaceSerachInput";
+import type { PlaceResult, PlaceSearchOrigin } from "@/components/planner/ActivityField/PlaceSerachInput";
 import { createClientId } from "@/lib/ids";
 import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 
@@ -19,6 +20,7 @@ export interface ItineraryActivity {
     cost: number;
     placeId?: string;
     placeSubtitle?: string;
+    markerColor?: string;
     lat?: number;
     lon?: number;
     routeRole?: "NONE" | "LODGING" | "START" | "END" | "FIXED";
@@ -42,7 +44,27 @@ type ActivityError = { message: string } | null;
 const LODGING_ROW_KEY = "__lodging__";
 const PLACE_SEARCH_COMMAND = "/장소검색";
 const TIME_ROWS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
-const DEFAULT_COST_ROWS = ["아침", "점심", "저녁", "교통", "기타"];
+const DEFAULT_COST_ROWS = ["입장", "식사", "숙박", "교통", "기타"];
+const ROUTE_MARKER_COLORS = [
+    { label: "Blue", value: "#2563eb" },
+    { label: "Sky", value: "#0284c7" },
+    { label: "Cyan", value: "#0891b2" },
+    { label: "Teal", value: "#0f766e" },
+    { label: "Green", value: "#16a34a" },
+    { label: "Lime", value: "#65a30d" },
+    { label: "Yellow", value: "#ca8a04" },
+    { label: "Rose", value: "#e11d48" },
+    { label: "Pink", value: "#db2777" },
+    { label: "Fuchsia", value: "#c026d3" },
+    { label: "Amber", value: "#d97706" },
+    { label: "Orange", value: "#ea580c" },
+    { label: "Red", value: "#dc2626" },
+    { label: "Violet", value: "#7c3aed" },
+    { label: "Purple", value: "#9333ea" },
+    { label: "Indigo", value: "#4f46e5" },
+    { label: "Gray", value: "#4b5563" },
+    { label: "Slate", value: "#334155" },
+];
 
 const timeToMinutes = (value: string) => {
     const [hh, mm] = value.split(":").map(Number);
@@ -88,6 +110,7 @@ export default function TravelItinerary({
     template = "basic",
     tier = "FREE",
     planId,
+    countryCode = "KR",
     preparationCost = 0,
     currency = DEFAULT_CURRENCY,
     onCostSelectionChange,
@@ -99,6 +122,7 @@ export default function TravelItinerary({
     template?: TravelPlanDraft["template"];
     tier?: TravelPlanDraft["tier"];
     planId?: string;
+    countryCode?: TravelCountryCode;
     preparationCost?: number;
     currency?: CurrencyRate;
     onCostSelectionChange?: (cells: SelectedCostCell[]) => void;
@@ -109,6 +133,13 @@ export default function TravelItinerary({
         rowKey: string;
         query: string;
         fixed: boolean;
+        origin: PlaceSearchOrigin | null;
+    } | null>(null);
+    const [activityPlaceTarget, setActivityPlaceTarget] = useState<{
+        dayId: string;
+        activityId: string;
+        query: string;
+        origin: PlaceSearchOrigin | null;
     } | null>(null);
     const [selectedCostCellKeys, setSelectedCostCellKeys] = useState<Set<string>>(new Set());
     const [isCostCellDragging, setIsCostCellDragging] = useState(false);
@@ -144,6 +175,7 @@ export default function TravelItinerary({
             location: "",
             activity: "",
             cost: 0,
+            markerColor: template === "route_sheet" ? ROUTE_MARKER_COLORS[0].value : undefined,
         };
         setDays((prev) =>
             prev.map((day) => (day.id === dayId ? { ...day, activities: [...day.activities, newActivity] } : day))
@@ -251,6 +283,20 @@ export default function TravelItinerary({
                     ? { ...day, activities: arrayMove(day.activities, oldIndex, newIndex) }
                     : day
             )
+        );
+    };
+
+    const reorderRouteStops = (dayId: string, activeId: string, overId: string) => {
+        setDays((prev) =>
+            prev.map((day) => {
+                if (day.id !== dayId) return day;
+                const routeStops = day.activities.filter((activity) => !isRouteSheetFood(activity));
+                const hiddenRows = day.activities.filter(isRouteSheetFood);
+                const oldIndex = routeStops.findIndex((activity) => activity.id === activeId);
+                const newIndex = routeStops.findIndex((activity) => activity.id === overId);
+                if (oldIndex < 0 || newIndex < 0) return day;
+                return { ...day, activities: [...arrayMove(routeStops, oldIndex, newIndex), ...hiddenRows] };
+            })
         );
     };
 
@@ -362,6 +408,7 @@ export default function TravelItinerary({
             rowKey,
             query: trimmed.slice(PLACE_SEARCH_COMMAND.length).trim(),
             fixed: rowKey !== LODGING_ROW_KEY,
+            origin: previousPlaceOrigin(days, dayId, rowKey),
         });
     };
 
@@ -397,6 +444,43 @@ export default function TravelItinerary({
             })
         );
         setSpreadsheetPlaceTarget(null);
+    };
+
+    const openActivityPlaceSearch = (dayId: string, activityId: string, query: string) => {
+        setActivityPlaceTarget({
+            dayId,
+            activityId,
+            query,
+            origin: previousPlaceOrigin(days, dayId, activityId),
+        });
+    };
+
+    const applyActivityPlace = (place: PlaceResult) => {
+        if (!activityPlaceTarget) return;
+        const { dayId, activityId } = activityPlaceTarget;
+        const title = place.displayTitle || place.titleKo || place.title || "";
+        setDays((prev) =>
+            prev.map((day) =>
+                day.id === dayId
+                    ? {
+                        ...day,
+                        activities: day.activities.map((activity) =>
+                            activity.id === activityId
+                                ? {
+                                    ...activity,
+                                    location: title,
+                                    placeId: place.id,
+                                    placeSubtitle: place.subtitle,
+                                    lat: place.lat,
+                                    lon: place.lon,
+                                }
+                                : activity
+                        ),
+                    }
+                    : day
+            )
+        );
+        setActivityPlaceTarget(null);
     };
 
     const removeSpreadsheetDay = (dayId: string) => {
@@ -519,6 +603,41 @@ export default function TravelItinerary({
                         )}
                     </>
                 )}
+
+                {template === "timeline" && (
+                    <TimelineTemplate
+                        days={days}
+                        title={title}
+                        totalCost={totalCost}
+                        preparationCost={preparationCost}
+                        currency={currency}
+                        onAddDay={addDay}
+                        onRemoveDay={removeDay}
+                        onUpdateDayTitle={updateDayTitle}
+                        onUpdateDayDate={updateDayDate}
+                        onAddActivity={addActivity}
+                        onRemoveActivity={removeActivity}
+                        onUpdateActivityField={updateActivityField}
+                        onSetActivityTime={setTimeForActivity}
+                        onSearchPlace={openActivityPlaceSearch}
+                    />
+                )}
+
+                {template === "route_sheet" && (
+                    <RouteSheetTemplate
+                        days={days}
+                        onAddDay={addDay}
+                        onRemoveDay={removeDay}
+                        onUpdateDayTitle={updateDayTitle}
+                        onUpdateDayDate={updateDayDate}
+                        onAddActivity={addActivity}
+                        onRemoveActivity={removeActivity}
+                        onUpdateActivityField={updateActivityField}
+                        onSetActivityTime={setTimeForActivity}
+                        onReorderRouteStops={reorderRouteStops}
+                        onSearchPlace={openActivityPlaceSearch}
+                    />
+                )}
             </div>
             <PlaceSearchModal
                 open={Boolean(spreadsheetPlaceTarget)}
@@ -532,6 +651,18 @@ export default function TravelItinerary({
                 }}
                 paidPlaces={tier === "PAID"}
                 planId={planId}
+                countryCode={countryCode}
+                origin={spreadsheetPlaceTarget?.origin}
+            />
+            <PlaceSearchModal
+                open={Boolean(activityPlaceTarget)}
+                onClose={() => setActivityPlaceTarget(null)}
+                onSelect={applyActivityPlace}
+                initialQuery={activityPlaceTarget?.query}
+                paidPlaces={tier === "PAID"}
+                planId={planId}
+                countryCode={countryCode}
+                origin={activityPlaceTarget?.origin}
             />
         </div>
     );
@@ -673,6 +804,675 @@ function SpreadsheetTemplate({
         </div>
         </div>
     );
+}
+
+function TimelineTemplate({
+    days,
+    title,
+    totalCost,
+    preparationCost,
+    currency,
+    onAddDay,
+    onRemoveDay,
+    onUpdateDayTitle,
+    onUpdateDayDate,
+    onAddActivity,
+    onRemoveActivity,
+    onUpdateActivityField,
+    onSetActivityTime,
+    onSearchPlace,
+}: {
+    days: ItineraryDay[];
+    title: string;
+    totalCost: number;
+    preparationCost: number;
+    currency: CurrencyRate;
+    onAddDay: () => void;
+    onRemoveDay: (dayId: string) => void;
+    onUpdateDayTitle: (dayId: string, title: string) => void;
+    onUpdateDayDate: (dayId: string, date: string) => void;
+    onAddActivity: (dayId: string) => void;
+    onRemoveActivity: (dayId: string, activityId: string) => void;
+    onUpdateActivityField: (dayId: string, activityId: string, field: keyof ItineraryActivity, value: string | number) => void;
+    onSetActivityTime: (dayId: string, activityId: string, nextTime: string) => void;
+    onSearchPlace: (dayId: string, activityId: string, query: string) => void;
+}) {
+    return (
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="border-b border-gray-200 bg-white px-4 py-5 sm:px-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-black text-gray-700">
+                            <Sparkles className="h-3.5 w-3.5 text-rose-500" />
+                            트립 보드
+                        </div>
+                        <h2 className="mt-3 truncate text-2xl font-black text-gray-950">{title || "여행 계획"}</h2>
+                        <p className="mt-1 text-sm font-semibold text-gray-500">
+                            날짜별 카드에 시간, 장소, 메모, 비용을 정리하는 일정표입니다.
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                            <div className="text-xs font-bold text-gray-500">총 경비</div>
+                            <div className="text-lg font-black text-gray-950">{formatCurrencyAmount(totalCost, currency)}</div>
+                        </div>
+                        {preparationCost > 0 && (
+                            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                <div className="text-xs font-bold text-gray-500">준비물 비용</div>
+                                <div className="text-lg font-black text-gray-950">{formatCurrencyAmount(preparationCost, currency)}</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 sm:p-5">
+                <div className="grid gap-4 xl:grid-cols-3">
+                    {days.map((day, dayIndex) => {
+                        const dayCost = day.activities.reduce((sum, activity) => sum + (Number(activity.cost) || 0), 0);
+                        return (
+                            <section key={day.id} className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                                <div className="border-b border-gray-200 bg-gray-950 px-4 py-4 text-white">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-black uppercase tracking-wide text-white/55">
+                                                보드 {String(dayIndex + 1).padStart(2, "0")}
+                                            </div>
+                                            <input
+                                                value={day.dayTitle}
+                                                onChange={(event) => onUpdateDayTitle(day.id, event.target.value)}
+                                                className="mt-2 w-full min-w-0 bg-transparent text-lg font-black text-white placeholder:text-white/50 focus:outline-none"
+                                                placeholder={`Day ${dayIndex + 1}`}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => onRemoveDay(day.id)}
+                                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+                                            aria-label="Day 삭제"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                    <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                                        <label className="flex min-w-0 items-center gap-2 rounded-lg bg-white/10 px-3 py-2">
+                                            <CalendarDays className="h-4 w-4 text-white/65" />
+                                            <input
+                                                type="date"
+                                                value={day.date}
+                                                onChange={(event) => onUpdateDayDate(day.id, event.target.value)}
+                                                className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white focus:outline-none"
+                                            />
+                                        </label>
+                                        <div className="rounded-lg bg-white px-3 py-2 text-sm font-black text-gray-950">
+                                            {formatCurrencyAmount(dayCost, currency)}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 bg-gray-50 p-3">
+                                    {day.activities.map((activity, activityIndex) => (
+                                        <article key={activity.id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+                                            <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-3 py-2">
+                                                <span className="rounded-full bg-gray-950 px-2.5 py-1 text-xs font-black text-white">
+                                                    스팟 {activityIndex + 1}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onRemoveActivity(day.id, activity.id)}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                    aria-label="스팟 삭제"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2 p-3">
+                                                <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                                                    <Clock className="h-4 w-4 text-gray-500" />
+                                                    <input
+                                                        type="time"
+                                                        value={activity.time}
+                                                        onChange={(event) => onSetActivityTime(day.id, activity.id, event.target.value)}
+                                                        className="min-w-0 flex-1 bg-transparent text-sm font-black text-gray-900 focus:outline-none"
+                                                    />
+                                                </label>
+                                                <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
+                                                    <MapPin className="h-4 w-4 shrink-0 text-gray-500" />
+                                                    <input
+                                                        value={activity.location}
+                                                        onChange={(event) => onUpdateActivityField(day.id, activity.id, "location", event.target.value)}
+                                                        className="min-w-0 flex-1 bg-transparent text-sm font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                                                        placeholder="장소"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onSearchPlace(day.id, activity.id, activity.location)}
+                                                        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-950"
+                                                        aria-label="장소 검색"
+                                                    >
+                                                        <Search className="h-4 w-4" />
+                                                    </button>
+                                                </label>
+                                                <textarea
+                                                    value={activity.activity}
+                                                    onChange={(event) => onUpdateActivityField(day.id, activity.id, "activity", event.target.value)}
+                                                    className="min-h-20 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-950/10"
+                                                    placeholder="일정 메모"
+                                                />
+                                                <input
+                                                    value={activity.cost ? String(activity.cost) : ""}
+                                                    inputMode="numeric"
+                                                    onChange={(event) => onUpdateActivityField(day.id, activity.id, "cost", Number(event.target.value.replace(/[^\d]/g, "")) || 0)}
+                                                    className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-black text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-950/10"
+                                                    placeholder="비용"
+                                                />
+                                            </div>
+                                        </article>
+                                    ))}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => onAddActivity(day.id)}
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-black text-gray-700 hover:border-gray-950 hover:text-gray-950"
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                        스팟 추가
+                                    </button>
+                                </div>
+                            </section>
+                        );
+                    })}
+                    <button
+                        type="button"
+                        onClick={onAddDay}
+                        className="flex min-h-64 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white py-5 text-sm font-black text-gray-700 shadow-sm hover:border-gray-950 hover:text-gray-950"
+                    >
+                        <Plus className="h-5 w-5" />
+                        Day 추가
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function RouteSheetTemplate({
+    days,
+    onAddDay,
+    onRemoveDay,
+    onUpdateDayTitle,
+    onUpdateDayDate,
+    onAddActivity,
+    onRemoveActivity,
+    onUpdateActivityField,
+    onSetActivityTime,
+    onReorderRouteStops,
+    onSearchPlace,
+}: {
+    days: ItineraryDay[];
+    onAddDay: () => void;
+    onRemoveDay: (dayId: string) => void;
+    onUpdateDayTitle: (dayId: string, title: string) => void;
+    onUpdateDayDate: (dayId: string, date: string) => void;
+    onAddActivity: (dayId: string) => void;
+    onRemoveActivity: (dayId: string, activityId: string) => void;
+    onUpdateActivityField: (dayId: string, activityId: string, field: keyof ItineraryActivity, value: string | number) => void;
+    onSetActivityTime: (dayId: string, activityId: string, nextTime: string) => void;
+    onReorderRouteStops: (dayId: string, activeId: string, overId: string) => void;
+    onSearchPlace: (dayId: string, activityId: string, query: string) => void;
+}) {
+    const handleRouteDragEnd = (dayId: string, event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        onReorderRouteStops(dayId, String(active.id), String(over.id));
+    };
+
+    return (
+        <div className="space-y-5">
+            {days.map((day, dayIndex) => {
+                const routeStops = day.activities.filter((activity) => !isRouteSheetFood(activity));
+                return (
+                    <section key={day.id} className="overflow-visible rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <div className="border-b border-gray-200 bg-white px-4 py-4 sm:px-5">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                <div className="min-w-0">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                        <span className="rounded-full bg-gray-950 px-2.5 py-1 text-xs font-black text-white">
+                                            Route Plan {String(dayIndex + 1).padStart(2, "0")}
+                                        </span>
+                                        <input
+                                            value={day.dayTitle}
+                                            onChange={(event) => onUpdateDayTitle(day.id, event.target.value)}
+                                            className="min-w-0 flex-1 bg-transparent text-xl font-black text-gray-950 focus:outline-none"
+                                            placeholder={`Day ${dayIndex + 1}`}
+                                        />
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <input
+                                            type="date"
+                                            value={day.date}
+                                            onChange={(event) => onUpdateDayDate(day.id, event.target.value)}
+                                            className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-950/10"
+                                        />
+                                        <span className="rounded-lg bg-gray-50 px-3 py-2 text-sm font-black text-gray-500">
+                                            {routeStops.length} stops
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => onRemoveDay(day.id)}
+                                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-black text-gray-500 hover:bg-red-50 hover:text-red-600"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Day 삭제
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 bg-gray-50 p-3 sm:p-5">
+                            <div className="overflow-x-auto overflow-y-visible rounded-xl border border-gray-200 bg-white p-3 pb-6 [scrollbar-color:#111827_#e5e7eb] [scrollbar-width:thin]">
+                                <DndContext collisionDetection={closestCenter} onDragEnd={(event) => handleRouteDragEnd(day.id, event)}>
+                                    <SortableContext items={routeStops.map((activity) => activity.id)} strategy={rectSortingStrategy}>
+                                        <RouteLineDiagram
+                                            dayId={day.id}
+                                            stops={routeStops}
+                                            onRemoveActivity={onRemoveActivity}
+                                            onUpdateActivityField={onUpdateActivityField}
+                                            onSetActivityTime={onSetActivityTime}
+                                            onSearchPlace={onSearchPlace}
+                                        />
+                                    </SortableContext>
+                                </DndContext>
+                                <button
+                                    type="button"
+                                    onClick={() => onAddActivity(day.id)}
+                                    className="mt-3 inline-flex min-w-[920px] items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-3 py-3 text-sm font-black text-gray-700 hover:border-gray-950 hover:text-gray-950"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                    스팟 추가
+                                </button>
+                            </div>
+
+                            <DndContext collisionDetection={closestCenter} onDragEnd={(event) => handleRouteDragEnd(day.id, event)}>
+                                <SortableContext items={routeStops.map((activity) => activity.id)} strategy={rectSortingStrategy}>
+                                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                                        {routeStops.map((activity, index) => (
+                                            <SortableRouteSpotCard
+                                                key={activity.id}
+                                                activity={activity}
+                                                index={index}
+                                                total={routeStops.length}
+                                            />
+                                        ))}
+                                    </div>
+                                </SortableContext>
+                            </DndContext>
+                        </div>
+                    </section>
+                );
+            })}
+
+            <button
+                type="button"
+                onClick={onAddDay}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-white py-5 text-sm font-black text-gray-700 shadow-sm hover:border-gray-950 hover:text-gray-950"
+            >
+                <Plus className="h-5 w-5" />
+                Route Plan Day 추가
+            </button>
+        </div>
+    );
+}
+
+function RouteLineDiagram({
+    dayId,
+    stops,
+    onRemoveActivity,
+    onUpdateActivityField,
+    onSetActivityTime,
+    onSearchPlace,
+}: {
+    dayId: string;
+    stops: ItineraryActivity[];
+    onRemoveActivity: (dayId: string, activityId: string) => void;
+    onUpdateActivityField: (dayId: string, activityId: string, field: keyof ItineraryActivity, value: string | number) => void;
+    onSetActivityTime: (dayId: string, activityId: string, nextTime: string) => void;
+    onSearchPlace: (dayId: string, activityId: string, query: string) => void;
+}) {
+    const points = routeSheetPoints(stops.length);
+    const path = routeSheetPath(points);
+    const [selectedStopId, setSelectedStopId] = useState<string | null>(null);
+    const selectedStopIndex = stops.findIndex((stop) => stop.id === selectedStopId);
+    const selectedStop = selectedStopIndex >= 0 ? stops[selectedStopIndex] : null;
+    const selectedPoint = selectedStop ? points[selectedStopIndex] ?? points[points.length - 1] : null;
+    const panelOpensLeft = selectedPoint ? selectedPoint.x > 68 : false;
+    const panelTop = selectedPoint ? Math.max(3, Math.min(72, selectedPoint.y - 5)) : 0;
+
+    return (
+        <div className="relative h-[430px] w-[920px] max-w-none overflow-visible rounded-xl bg-white">
+            <div className="absolute inset-0 bg-[linear-gradient(#f3f4f6_1px,transparent_1px),linear-gradient(90deg,#f3f4f6_1px,transparent_1px)] bg-[size:28px_28px]" />
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full">
+                <path d={path} fill="none" stroke="#111827" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+            </svg>
+            {stops.map((activity, index) => {
+                const point = points[index] ?? points[points.length - 1];
+                const isSelected = activity.id === selectedStopId;
+                return (
+                    <SortableRouteMarker
+                        key={activity.id}
+                        activity={activity}
+                        index={index}
+                        total={stops.length}
+                        point={point}
+                        selected={isSelected}
+                        onSelect={() => setSelectedStopId(activity.id)}
+                    />
+                );
+            })}
+            {selectedStop && selectedPoint && (
+                <div
+                    className="absolute z-20 w-[min(22rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white/95 p-3 shadow-xl backdrop-blur"
+                    style={{
+                        left: `${panelOpensLeft ? selectedPoint.x - 2 : selectedPoint.x + 2}%`,
+                        top: `${panelTop}%`,
+                        transform: panelOpensLeft ? "translateX(-100%)" : "translateX(0)",
+                    }}
+                >
+                    <span
+                        className={`absolute h-3 w-3 rotate-45 border bg-white/95 ${
+                            panelOpensLeft ? "-right-1.5 border-b-0 border-l-0" : "-left-1.5 border-r-0 border-t-0"
+                        } top-6 border-gray-200`}
+                    />
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="min-w-0 text-sm font-black text-gray-950">선택한 스팟</div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onRemoveActivity(dayId, selectedStop.id);
+                                setSelectedStopId(null);
+                            }}
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label="루트 스팟 삭제"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <div className="max-h-[min(25rem,calc(100vh-8rem))] space-y-2 overflow-y-auto pr-1">
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-black text-gray-500">시간</span>
+                            <input
+                                type="time"
+                                value={selectedStop.time}
+                                onChange={(event) => onSetActivityTime(dayId, selectedStop.id, event.target.value)}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-black text-gray-900 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-black text-gray-500">장소</span>
+                            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-yellow-300">
+                                <input
+                                    value={selectedStop.location}
+                                    onChange={(event) => onUpdateActivityField(dayId, selectedStop.id, "location", event.target.value)}
+                                    className="min-w-0 flex-1 bg-transparent text-sm font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                                    placeholder="장소"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => onSearchPlace(dayId, selectedStop.id, selectedStop.location)}
+                                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-950"
+                                    aria-label="장소 검색"
+                                >
+                                    <Search className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </label>
+                        <div>
+                            <span className="mb-1 block text-xs font-black text-gray-500">마커 색상</span>
+                            <div className="grid grid-cols-9 gap-1.5">
+                                {ROUTE_MARKER_COLORS.map((color) => {
+                                    const isActive = (selectedStop.markerColor ?? "") === color.value;
+                                    return (
+                                        <button
+                                            key={color.value}
+                                            type="button"
+                                            onClick={() => onUpdateActivityField(dayId, selectedStop.id, "markerColor", color.value)}
+                                            className={`h-7 rounded-md border transition ${isActive ? "border-gray-950 ring-2 ring-gray-950/15" : "border-white hover:border-gray-400"}`}
+                                            style={{ backgroundColor: color.value }}
+                                            aria-label={`마커 색상 ${color.label}`}
+                                        />
+                                    );
+                                })}
+                            </div>
+                            <label className="mt-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2 py-2">
+                                <span className="text-xs font-black text-gray-500">직접 선택</span>
+                                <input
+                                    type="color"
+                                    value={selectedStop.markerColor ?? routeMarkerColor(selectedStop, selectedStopIndex, stops.length)}
+                                    onChange={(event) => onUpdateActivityField(dayId, selectedStop.id, "markerColor", event.target.value)}
+                                    className="ml-auto h-7 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
+                                    aria-label="사용자 지정 마커 색상"
+                                />
+                            </label>
+                        </div>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-black text-gray-500">내용</span>
+                            <textarea
+                                value={selectedStop.activity}
+                                onChange={(event) => onUpdateActivityField(dayId, selectedStop.id, "activity", event.target.value)}
+                                className="min-h-28 w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold leading-5 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                                placeholder="일정 내용"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-black text-gray-500">소요 시간</span>
+                            <input
+                                value={selectedStop.placeSubtitle ?? ""}
+                                onChange={(event) => onUpdateActivityField(dayId, selectedStop.id, "placeSubtitle", event.target.value)}
+                                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-300"
+                                placeholder="예: 50분"
+                            />
+                        </label>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function SortableRouteMarker({
+    activity,
+    index,
+    total,
+    point,
+    selected,
+    onSelect,
+}: {
+    activity: ItineraryActivity;
+    index: number;
+    total: number;
+    point: { x: number; y: number };
+    selected: boolean;
+    onSelect: () => void;
+}) {
+    const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({ id: activity.id });
+    const markerColor = routeMarkerColor(activity, index, total);
+    const style: React.CSSProperties = {
+        left: `${point.x}%`,
+        top: `${point.y}%`,
+        transform: `${CSS.Transform.toString(transform) ?? ""} translate(-50%, -50%)`,
+        transition,
+        zIndex: isDragging ? 30 : 10,
+    };
+
+    return (
+        <div ref={setNodeRef} className="absolute flex w-28 flex-col items-center text-center" style={style}>
+            <button
+                type="button"
+                onClick={onSelect}
+                className={`relative flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-md transition focus:outline-none focus:ring-4 focus:ring-gray-950/20 ${selected ? "ring-4 ring-gray-950/20" : "hover:scale-105"}`}
+                aria-label={`${activity.location || `스팟 ${index + 1}`} 입력 열기`}
+            >
+                <MapPin className="h-10 w-10 drop-shadow-sm" fill="currentColor" strokeWidth={2.2} style={{ color: markerColor }} />
+                <span className="absolute top-2 text-[11px] font-black text-white">
+                    {index + 1}
+                </span>
+                <span
+                    ref={setActivatorNodeRef}
+                    onClick={(event) => event.stopPropagation()}
+                    className="absolute -right-2 -top-2 inline-flex h-6 w-6 cursor-grab items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm active:cursor-grabbing"
+                    aria-label="마커 순서 변경"
+                    {...attributes}
+                    {...listeners}
+                >
+                    <GripVertical className="h-3.5 w-3.5" />
+                </span>
+            </button>
+            <div className="mt-1 max-w-28 rounded-full bg-white/95 px-2 py-1 text-xs font-black leading-4 text-gray-950 shadow-sm">
+                <div className="truncate">{activity.location || "장소"}</div>
+                <div className="text-[10px] font-bold text-gray-500">{activity.time || "--:--"}</div>
+            </div>
+        </div>
+    );
+}
+
+function SortableRouteSpotCard({
+    activity,
+    index,
+    total,
+}: {
+    activity: ItineraryActivity;
+    index: number;
+    total: number;
+}) {
+    const { attributes, listeners, setActivatorNodeRef, setNodeRef, transform, transition, isDragging } = useSortable({ id: activity.id });
+    const style: React.CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.85 : 1,
+        zIndex: isDragging ? 20 : undefined,
+    };
+
+    return (
+        <article ref={setNodeRef} style={style} className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                    <button
+                        type="button"
+                        ref={setActivatorNodeRef}
+                        className="inline-flex h-7 w-7 shrink-0 cursor-grab items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 active:cursor-grabbing"
+                        aria-label="스팟 순서 변경"
+                        {...attributes}
+                        {...listeners}
+                    >
+                        <GripVertical className="h-4 w-4" />
+                    </button>
+                    <span
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{ backgroundColor: routeMarkerColor(activity, index, total) }}
+                    />
+                    <span className="truncate text-sm font-black text-gray-950">
+                        {activity.location || `스팟 ${index + 1}`}
+                    </span>
+                </div>
+                <span className="shrink-0 text-xs font-black text-gray-500">{activity.time || "--:--"}</span>
+            </div>
+            <p className="line-clamp-2 min-h-10 text-sm font-semibold leading-5 text-gray-600">
+                {activity.activity || "일정 내용"}
+            </p>
+            <div className="mt-3 rounded-lg bg-gray-50 px-2 py-1.5 text-xs font-black text-gray-500">
+                {activity.placeSubtitle || "소요 시간"}
+            </div>
+        </article>
+    );
+}
+
+function routeMarkerColor(activity: ItineraryActivity, index: number, total: number) {
+    if (activity.markerColor) return activity.markerColor;
+    if (index === 0) return ROUTE_MARKER_COLORS[1].value;
+    if (index === total - 1) return ROUTE_MARKER_COLORS[2].value;
+    return ROUTE_MARKER_COLORS[index % ROUTE_MARKER_COLORS.length].value;
+}
+
+function routeSheetPoints(count: number) {
+    const base = [
+        { x: 8, y: 20 },
+        { x: 26, y: 20 },
+        { x: 46, y: 20 },
+        { x: 66, y: 20 },
+        { x: 86, y: 20 },
+        { x: 86, y: 48 },
+        { x: 66, y: 48 },
+        { x: 46, y: 48 },
+        { x: 26, y: 48 },
+        { x: 8, y: 48 },
+        { x: 8, y: 76 },
+        { x: 30, y: 76 },
+        { x: 52, y: 76 },
+        { x: 74, y: 76 },
+        { x: 92, y: 76 },
+    ];
+    if (count <= base.length) return base.slice(0, Math.max(count, 1));
+    const extra = Array.from({ length: count - base.length }, (_, index) => ({
+        x: 92 - ((index + 1) * 16) % 84,
+        y: 90,
+    }));
+    return [...base, ...extra];
+}
+
+function routeSheetPath(points: Array<{ x: number; y: number }>) {
+    if (points.length === 0) return "";
+    return points.reduce((path, point, index) => {
+        if (index === 0) return `M ${point.x} ${point.y}`;
+        const previous = points[index - 1];
+        const controlX = (previous.x + point.x) / 2;
+        const controlY = previous.y === point.y ? previous.y : (previous.y + point.y) / 2;
+        return `${path} Q ${controlX} ${controlY} ${point.x} ${point.y}`;
+    }, "");
+}
+
+function isRouteSheetFood(activity: ItineraryActivity) {
+    return activity.time === "__food__";
+}
+
+function previousPlaceOrigin(days: ItineraryDay[], dayId: string, targetKey: string): PlaceSearchOrigin | null {
+    const day = days.find((item) => item.id === dayId);
+    if (!day) return null;
+
+    const activityIndex = day.activities.findIndex((activity) => activity.id === targetKey);
+    if (activityIndex >= 0) {
+        for (let index = activityIndex - 1; index >= 0; index--) {
+            const origin = activityToPlaceOrigin(day.activities[index]);
+            if (origin) return origin;
+        }
+        return null;
+    }
+
+    const targetRowIndex = spreadsheetRouteRowIndex(targetKey);
+    if (targetRowIndex === -1) return null;
+
+    return day.activities
+        .map((activity) => ({ activity, rowIndex: spreadsheetRouteRowIndex(activity.time) }))
+        .filter((item) => item.rowIndex >= 0 && item.rowIndex < targetRowIndex)
+        .sort((left, right) => right.rowIndex - left.rowIndex)
+        .map((item) => activityToPlaceOrigin(item.activity))
+        .find((origin): origin is PlaceSearchOrigin => Boolean(origin)) ?? null;
+}
+
+function activityToPlaceOrigin(activity?: ItineraryActivity): PlaceSearchOrigin | null {
+    if (!activity || !Number.isFinite(activity.lat) || !Number.isFinite(activity.lon)) return null;
+    return {
+        name: activity.location || activity.activity || undefined,
+        lat: activity.lat as number,
+        lon: activity.lon as number,
+    };
+}
+
+function spreadsheetRouteRowIndex(rowKey: string) {
+    if (rowKey === LODGING_ROW_KEY) return 0;
+    const timeIndex = TIME_ROWS.indexOf(rowKey);
+    if (timeIndex >= 0) return timeIndex + 1;
+    return -1;
 }
 
 function spreadsheetRowKeys(days: ItineraryDay[]) {

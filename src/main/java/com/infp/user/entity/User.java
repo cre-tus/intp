@@ -45,6 +45,13 @@ public class User {
 
     private String nickname;
 
+    @Column(name = "status_message", length = 160)
+    private String statusMessage;
+
+    @Lob
+    @Column(name = "profile_image_url", columnDefinition = "LONGTEXT")
+    private String profileImageUrl;
+
     private LocalDate birth;
     //Date <-> LocalDate
 

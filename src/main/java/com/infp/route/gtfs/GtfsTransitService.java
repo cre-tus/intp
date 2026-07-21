@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -32,20 +33,38 @@ public class GtfsTransitService {
     public static final String COST_MODEL =
             "GTFS nearest-stop estimate: walk to nearest stop, transit-distance estimate, walk from stop, 6min wait buffer";
 
-    private final Path datasetDir;
+    private final List<Path> datasetDirs;
+    private final boolean loadRouteNames;
     private final List<StopRow> stops = new ArrayList<>();
     private final Map<String, List<String>> routeNamesByStopId = new HashMap<>();
 
-    public GtfsTransitService(@Value("${gtfs.dataset-dir:db/gtfs/tokyo_rail}") String datasetDir) {
-        this.datasetDir = Path.of(datasetDir);
+    public GtfsTransitService(
+            @Value("${gtfs.dataset-dirs:${gtfs.dataset-dir:db/gtfs/tokyo_rail}}") String datasetDirs,
+            @Value("${gtfs.load-route-names:false}") boolean loadRouteNames
+    ) {
+        this.datasetDirs = Arrays.stream(datasetDirs.split("[,;]"))
+                .map(String::trim)
+                .filter(value -> !value.isBlank())
+                .map(Path::of)
+                .toList();
+        this.loadRouteNames = loadRouteNames;
     }
 
     @PostConstruct
     void loadDataset() {
         try {
-            loadStops();
+            for (Path datasetDir : datasetDirs) {
+                if (!Files.isDirectory(datasetDir)) continue;
+                loadStops(datasetDir);
+                if (loadRouteNames) {
+                    loadRoutesByStop(datasetDir);
+                }
+            }
+            if (stops.isEmpty()) {
+                throw new IllegalStateException("GTFS stops are empty: " + datasetDirs);
+            }
         } catch (IOException exception) {
-            throw new IllegalStateException("GTFS 데이터셋을 읽을 수 없습니다: " + datasetDir.toAbsolutePath(), exception);
+            throw new IllegalStateException("Failed to read GTFS datasets: " + datasetDirs, exception);
         }
     }
 
@@ -67,7 +86,7 @@ public class GtfsTransitService {
         return stops.stream()
                 .map(stop -> stop.toTransitStop(distanceMeters(point.lat(), point.lon(), stop.lat(), stop.lon()), routeNamesByStopId))
                 .min(Comparator.comparingInt(TransitStop::distanceMeters))
-                .orElseThrow(() -> new IllegalStateException("GTFS 정류장 데이터가 비어 있습니다."));
+                .orElseThrow(() -> new IllegalStateException("GTFS stops are empty."));
     }
 
     public List<TransitStop> randomStops(int limit) {
@@ -93,7 +112,10 @@ public class GtfsTransitService {
     public CostEstimate estimateCost(RoutePoint from, RoutePoint to) {
         TransitStop fromStop = nearestStop(from);
         TransitStop toStop = nearestStop(to);
+        return estimateCost(from, to, fromStop, toStop);
+    }
 
+    public CostEstimate estimateCost(RoutePoint from, RoutePoint to, TransitStop fromStop, TransitStop toStop) {
         double walkKm = fromStop.distanceMeters() / 1000.0 + toStop.distanceMeters() / 1000.0;
         double stopDistanceKm = distanceKm(fromStop.lat(), fromStop.lon(), toStop.lat(), toStop.lon());
         double totalDistanceKm = walkKm + stopDistanceKm;
@@ -105,7 +127,7 @@ public class GtfsTransitService {
         return new CostEstimate(roundKm(totalDistanceKm), Math.max(1, totalMinutes), fromStop, toStop);
     }
 
-    private void loadStops() throws IOException {
+    private void loadStops(Path datasetDir) throws IOException {
         Path stopsFile = datasetDir.resolve("stops.txt");
         try (BufferedReader reader = Files.newBufferedReader(stopsFile, StandardCharsets.UTF_8)) {
             List<String> header = parseCsvLine(reader.readLine());
@@ -125,15 +147,21 @@ public class GtfsTransitService {
                 double lat = parseDouble(get(row, latIdx));
                 double lon = parseDouble(get(row, lonIdx));
                 if (isValidCoordinate(lat, lon)) {
-                    stops.add(new StopRow(stopId, get(row, nameIdx), lat, lon));
+                    stops.add(new StopRow(datasetScopedId(datasetDir, stopId), get(row, nameIdx), lat, lon));
                 }
             }
         }
     }
 
-    private void loadRoutesByStop() throws IOException {
-        Map<String, String> routeNames = loadRouteNames();
-        Map<String, String> tripRouteIds = loadTripRouteIds();
+    private void loadRoutesByStop(Path datasetDir) throws IOException {
+        if (!Files.isRegularFile(datasetDir.resolve("routes.txt"))
+                || !Files.isRegularFile(datasetDir.resolve("trips.txt"))
+                || !Files.isRegularFile(datasetDir.resolve("stop_times.txt"))) {
+            return;
+        }
+
+        Map<String, String> routeNames = loadRouteNames(datasetDir);
+        Map<String, String> tripRouteIds = loadTripRouteIds(datasetDir);
         Map<String, Set<String>> routesByStop = new HashMap<>();
 
         Path stopTimesFile = datasetDir.resolve("stop_times.txt");
@@ -146,7 +174,7 @@ public class GtfsTransitService {
             while ((line = reader.readLine()) != null) {
                 List<String> row = parseCsvLine(line);
                 String routeId = tripRouteIds.get(get(row, tripIdx));
-                String stopId = get(row, stopIdx);
+                String stopId = datasetScopedId(datasetDir, get(row, stopIdx));
                 if (routeId == null || stopId.isBlank()) continue;
                 routesByStop.computeIfAbsent(stopId, ignored -> new HashSet<>())
                         .add(routeNames.getOrDefault(routeId, routeId));
@@ -158,7 +186,7 @@ public class GtfsTransitService {
         }
     }
 
-    private Map<String, String> loadRouteNames() throws IOException {
+    private Map<String, String> loadRouteNames(Path datasetDir) throws IOException {
         Map<String, String> routeNames = new HashMap<>();
         Path routesFile = datasetDir.resolve("routes.txt");
         try (BufferedReader reader = Files.newBufferedReader(routesFile, StandardCharsets.UTF_8)) {
@@ -172,13 +200,16 @@ public class GtfsTransitService {
                 List<String> row = parseCsvLine(line);
                 String routeId = get(row, idIdx);
                 String routeName = !get(row, shortIdx).isBlank() ? get(row, shortIdx) : get(row, longIdx);
-                if (!routeId.isBlank()) routeNames.put(routeId, routeName.isBlank() ? routeId : routeName);
+                if (!routeId.isBlank()) {
+                    String scopedRouteId = datasetScopedId(datasetDir, routeId);
+                    routeNames.put(scopedRouteId, routeName.isBlank() ? routeId : routeName);
+                }
             }
         }
         return routeNames;
     }
 
-    private Map<String, String> loadTripRouteIds() throws IOException {
+    private Map<String, String> loadTripRouteIds(Path datasetDir) throws IOException {
         Map<String, String> tripRouteIds = new HashMap<>();
         Path tripsFile = datasetDir.resolve("trips.txt");
         try (BufferedReader reader = Files.newBufferedReader(tripsFile, StandardCharsets.UTF_8)) {
@@ -190,7 +221,9 @@ public class GtfsTransitService {
             while ((line = reader.readLine()) != null) {
                 List<String> row = parseCsvLine(line);
                 String tripId = get(row, tripIdx);
-                if (!tripId.isBlank()) tripRouteIds.put(tripId, get(row, routeIdx));
+                if (!tripId.isBlank()) {
+                    tripRouteIds.put(tripId, datasetScopedId(datasetDir, get(row, routeIdx)));
+                }
             }
         }
         return tripRouteIds;
@@ -250,12 +283,19 @@ public class GtfsTransitService {
 
     private static void validateCoordinate(double lat, double lon) {
         if (!isValidCoordinate(lat, lon)) {
-            throw new IllegalArgumentException("유효하지 않은 좌표입니다.");
+            throw new IllegalArgumentException("Invalid coordinate.");
         }
     }
 
     private static boolean isValidCoordinate(double lat, double lon) {
         return Double.isFinite(lat) && Double.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    }
+
+    private static String datasetScopedId(Path datasetDir, String id) {
+        if (id == null || id.isBlank()) return "";
+        Path name = datasetDir.getFileName();
+        String prefix = name == null ? "gtfs" : name.toString();
+        return prefix + ":" + id.trim();
     }
 
     private static double roundKm(double value) {

@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 public class RouteOptimizationService {
 
     private static final int MAX_POINTS = 20;
+    private static final int EXACT_TSP_MAX_POINTS = 10;
+    private static final int INF = 1_000_000_000;
     private static final long MAX_CALCULATION_MILLIS = 10_000;
     private static final int ESTIMATED_GTFS_LOOKUP_MILLIS = 8;
     private static final int ESTIMATED_REDIS_LOOKUP_MILLIS = 1;
@@ -174,7 +176,7 @@ public class RouteOptimizationService {
                         point.routeRole()
                 ))
                 .collect(Collectors.joining("|"));
-        return "route:optimize:v1:" + Integer.toHexString(fingerprint.hashCode());
+        return "route:optimize:v2:" + Integer.toHexString(fingerprint.hashCode());
     }
 
     public RouteCompareResponse compare(List<RoutePoint> manualOrder) {
@@ -267,7 +269,7 @@ public class RouteOptimizationService {
                 .toList();
 
         if (start == null && end == null && fixed.isEmpty()) {
-            return optimizeWithTwoOpt(points, matrix);
+            return optimizeRoute(points, null, null, matrix);
         }
 
         List<RoutePoint> anchors = new ArrayList<>();
@@ -325,13 +327,20 @@ public class RouteOptimizationService {
 
     private List<RoutePoint> optimizeSegment(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {
         if (points.size() <= 1) return List.copyOf(points);
+        return optimizeRoute(points, start, end, matrix);
+    }
+
+    private List<RoutePoint> optimizeRoute(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        if (points.size() <= EXACT_TSP_MAX_POINTS) {
+            return optimizeExact(points, start, end, matrix);
+        }
 
         List<RoutePoint> best = List.copyOf(points);
         int bestMinutes = totalMinutesWithBounds(best, start, end, matrix);
 
         if (start != null) {
             List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, start);
-            candidate = improveSegmentWithTwoOpt(candidate, start, end, matrix);
+            candidate = improveWithLocalSearch(candidate, start, end, matrix);
             int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
             if (candidateMinutes < bestMinutes) {
                 best = candidate;
@@ -341,25 +350,8 @@ public class RouteOptimizationService {
 
         for (int i = 0; i < points.size(); i++) {
             List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, i);
-            candidate = improveSegmentWithTwoOpt(candidate, start, end, matrix);
+            candidate = improveWithLocalSearch(candidate, start, end, matrix);
             int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
-            if (candidateMinutes < bestMinutes) {
-                best = candidate;
-                bestMinutes = candidateMinutes;
-            }
-        }
-
-        return best;
-    }
-
-    private List<RoutePoint> optimizeWithTwoOpt(List<RoutePoint> points, CostMatrix matrix) {
-        List<RoutePoint> best = new ArrayList<>(points);
-        int bestMinutes = totalMinutes(best, matrix);
-
-        for (int start = 0; start < points.size(); start++) {
-            List<RoutePoint> candidate = nearestNeighborRoute(points, matrix, start);
-            candidate = improveWithTwoOpt(candidate, matrix);
-            int candidateMinutes = totalMinutes(candidate, matrix);
             if (candidateMinutes < bestMinutes) {
                 best = candidate;
                 bestMinutes = candidateMinutes;
@@ -420,30 +412,80 @@ public class RouteOptimizationService {
         return route;
     }
 
-    private List<RoutePoint> improveWithTwoOpt(List<RoutePoint> route, CostMatrix matrix) {
-        List<RoutePoint> best = new ArrayList<>(route);
-        int bestMinutes = totalMinutes(best, matrix);
-        boolean improved = true;
+    private List<RoutePoint> optimizeExact(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        int size = points.size();
+        int stateCount = 1 << size;
+        int[][] dp = new int[stateCount][size];
+        int[][] parent = new int[stateCount][size];
 
-        while (improved) {
-            improved = false;
-            for (int left = 0; left < best.size() - 1; left++) {
-                for (int right = left + 1; right < best.size(); right++) {
-                    List<RoutePoint> candidate = twoOptSwap(best, left, right);
-                    int candidateMinutes = totalMinutes(candidate, matrix);
-                    if (candidateMinutes < bestMinutes) {
-                        best = candidate;
-                        bestMinutes = candidateMinutes;
-                        improved = true;
+        for (int mask = 0; mask < stateCount; mask++) {
+            for (int last = 0; last < size; last++) {
+                dp[mask][last] = INF;
+                parent[mask][last] = -1;
+            }
+        }
+
+        for (int i = 0; i < size; i++) {
+            dp[1 << i][i] = start == null ? 0 : matrix.minutes[matrix.indexOf(start)][matrix.indexOf(points.get(i))];
+        }
+
+        for (int mask = 1; mask < stateCount; mask++) {
+            for (int last = 0; last < size; last++) {
+                if ((mask & (1 << last)) == 0 || dp[mask][last] >= INF) continue;
+                for (int next = 0; next < size; next++) {
+                    if ((mask & (1 << next)) != 0) continue;
+                    int nextMask = mask | (1 << next);
+                    int candidate = dp[mask][last] + matrix.minutes[matrix.indexOf(points.get(last))][matrix.indexOf(points.get(next))];
+                    if (candidate < dp[nextMask][next]) {
+                        dp[nextMask][next] = candidate;
+                        parent[nextMask][next] = last;
                     }
                 }
             }
         }
 
+        int fullMask = stateCount - 1;
+        int bestLast = -1;
+        int bestMinutes = INF;
+        for (int last = 0; last < size; last++) {
+            int candidate = dp[fullMask][last];
+            if (end != null) {
+                candidate += matrix.minutes[matrix.indexOf(points.get(last))][matrix.indexOf(end)];
+            }
+            if (candidate < bestMinutes) {
+                bestMinutes = candidate;
+                bestLast = last;
+            }
+        }
+
+        List<RoutePoint> route = new ArrayList<>(size);
+        int mask = fullMask;
+        int current = bestLast;
+        while (current >= 0) {
+            route.add(points.get(current));
+            int previous = parent[mask][current];
+            mask ^= 1 << current;
+            current = previous;
+        }
+        java.util.Collections.reverse(route);
+        return route;
+    }
+
+    private List<RoutePoint> improveWithLocalSearch(List<RoutePoint> route, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        List<RoutePoint> best = new ArrayList<>(route);
+        boolean improved = true;
+
+        while (improved) {
+            int before = totalMinutesWithBounds(best, start, end, matrix);
+            best = improveWithTwoOpt(best, start, end, matrix);
+            best = improveWithOrOpt(best, start, end, matrix);
+            improved = totalMinutesWithBounds(best, start, end, matrix) < before;
+        }
+
         return best;
     }
 
-    private List<RoutePoint> improveSegmentWithTwoOpt(List<RoutePoint> route, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+    private List<RoutePoint> improveWithTwoOpt(List<RoutePoint> route, RoutePoint start, RoutePoint end, CostMatrix matrix) {
         List<RoutePoint> best = new ArrayList<>(route);
         int bestMinutes = totalMinutesWithBounds(best, start, end, matrix);
         boolean improved = true;
@@ -464,6 +506,43 @@ public class RouteOptimizationService {
         }
 
         return best;
+    }
+
+    private List<RoutePoint> improveWithOrOpt(List<RoutePoint> route, RoutePoint start, RoutePoint end, CostMatrix matrix) {
+        List<RoutePoint> best = new ArrayList<>(route);
+        int bestMinutes = totalMinutesWithBounds(best, start, end, matrix);
+        boolean improved = true;
+
+        while (improved) {
+            improved = false;
+            for (int blockSize = 1; blockSize <= Math.min(2, best.size()); blockSize++) {
+                int size = best.size();
+                for (int from = 0; from <= size - blockSize; from++) {
+                    for (int to = 0; to <= size; to++) {
+                        int insertAt = to > from ? to - blockSize : to;
+                        if (insertAt == from || insertAt < 0 || insertAt > size - blockSize) continue;
+                        List<RoutePoint> candidate = orOptMove(best, from, blockSize, to);
+                        int candidateMinutes = totalMinutesWithBounds(candidate, start, end, matrix);
+                        if (candidateMinutes < bestMinutes) {
+                            best = candidate;
+                            bestMinutes = candidateMinutes;
+                            improved = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return best;
+    }
+
+    private List<RoutePoint> orOptMove(List<RoutePoint> route, int from, int blockSize, int to) {
+        List<RoutePoint> candidate = new ArrayList<>(route);
+        List<RoutePoint> block = new ArrayList<>(candidate.subList(from, from + blockSize));
+        candidate.subList(from, from + blockSize).clear();
+        int insertAt = to > from ? to - blockSize : to;
+        candidate.addAll(insertAt, block);
+        return candidate;
     }
 
     private List<RoutePoint> twoOptSwap(List<RoutePoint> route, int left, int right) {
@@ -526,7 +605,12 @@ public class RouteOptimizationService {
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
                 if (i == j) continue;
-                GtfsTransitService.CostEstimate estimate = gtfsTransitService.estimateCost(points.get(i), points.get(j));
+                GtfsTransitService.CostEstimate estimate = gtfsTransitService.estimateCost(
+                        points.get(i),
+                        points.get(j),
+                        nearestStops.get(i),
+                        nearestStops.get(j)
+                );
                 minutes[i][j] = estimate.minutes();
                 distanceKm[i][j] = estimate.distanceKm();
             }
@@ -553,7 +637,12 @@ public class RouteOptimizationService {
         for (int i = 0; i < size; i++) {
             for (int j = 0; j < size; j++) {
                 if (i == j) continue;
-                CachedValue<GtfsTransitService.CostEstimate> estimate = cachedCostEstimate(points.get(i), points.get(j));
+                CachedValue<GtfsTransitService.CostEstimate> estimate = cachedCostEstimate(
+                        points.get(i),
+                        points.get(j),
+                        nearestStops.get(i),
+                        nearestStops.get(j)
+                );
                 minutes[i][j] = estimate.value().minutes();
                 distanceKm[i][j] = estimate.value().distanceKm();
                 if (estimate.hit()) hitCount++;
@@ -584,7 +673,12 @@ public class RouteOptimizationService {
         return new CachedValue<>(nearest, false);
     }
 
-    private CachedValue<GtfsTransitService.CostEstimate> cachedCostEstimate(RoutePoint from, RoutePoint to) {
+    private CachedValue<GtfsTransitService.CostEstimate> cachedCostEstimate(
+            RoutePoint from,
+            RoutePoint to,
+            TransitStop fromStop,
+            TransitStop toStop
+    ) {
         String key = "route:cost-estimate:v1:" + pointKey(from) + "->" + pointKey(to);
         try {
             String cached = redisTemplate.opsForValue().get(key);
@@ -595,7 +689,7 @@ public class RouteOptimizationService {
             // Redis is optional; fall back to direct GTFS calculation.
         }
 
-        GtfsTransitService.CostEstimate estimate = gtfsTransitService.estimateCost(from, to);
+        GtfsTransitService.CostEstimate estimate = gtfsTransitService.estimateCost(from, to, fromStop, toStop);
         try {
             redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(estimate), CACHE_TTL);
         } catch (Exception ignored) {

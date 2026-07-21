@@ -1,0 +1,33 @@
+[
+  {
+    "trip_id": "jp_family_rainy_child6_2026_06_tokyo_001",
+    "age_bucket": "30s",
+    "companion_type": "family_with_young_child",
+    "child_age_bucket": "preschool",
+    "group_age_bucket": "mixed",
+    "month_bucket": "6",
+    "season_bucket": "rainy",
+    "rainy_season": 1.0,
+    "anchor_lat": 35.6909,
+    "anchor_lon": 139.7003,
+    "source": "manual_context_seed",
+    "places": [
+      {"name": "Narita Airport", "category": "station", "time_bucket": "morning", "lat": 35.7719, "lon": 140.3929},
+      {"name": "Shinjuku Prince Hotel", "category": "station", "time_bucket": "afternoon", "lat": 35.6940, "lon": 139.7007},
+      {"name": "Tokyo Disneyland", "category": "theme_park", "time_bucket": "morning", "lat": 35.6329, "lon": 139.8804},
+      {"name": "Marunouchi", "category": "shopping", "time_bucket": "morning", "lat": 35.6812, "lon": 139.7671},
+      {"name": "Akihabara", "category": "shopping", "time_bucket": "afternoon", "lat": 35.6984, "lon": 139.7730},
+      {"name": "Tokyo Character Street", "category": "shopping", "time_bucket": "afternoon", "lat": 35.6812, "lon": 139.7671},
+      {"name": "Ginza Sanrio", "category": "shopping", "time_bucket": "evening", "lat": 35.6719, "lon": 139.7650},
+      {"name": "Yokohama Anpanman Children's Museum", "category": "kid_museum", "time_bucket": "morning", "lat": 35.4615, "lon": 139.6255},
+      {"name": "MARK IS Minatomirai", "category": "shopping", "time_bucket": "afternoon", "lat": 35.4578, "lon": 139.6328},
+      {"name": "Shibuya PARCO", "category": "shopping", "time_bucket": "afternoon", "lat": 35.6620, "lon": 139.6987},
+      {"name": "Kappabashi Dougu Street", "category": "shopping", "time_bucket": "morning", "lat": 35.7146, "lon": 139.7888},
+      {"name": "Hanayashiki Amusement Park", "category": "theme_park", "time_bucket": "afternoon", "lat": 35.7150, "lon": 139.7945},
+      {"name": "Sunshine City", "category": "shopping", "time_bucket": "afternoon", "lat": 35.7291, "lon": 139.7180},
+      {"name": "Odaiba", "category": "park", "time_bucket": "afternoon", "lat": 35.6256, "lon": 139.7757},
+      {"name": "DiverCity Tokyo Plaza", "category": "shopping", "time_bucket": "evening", "lat": 35.6252, "lon": 139.7758},
+      {"name": "Tokyo DisneySea", "category": "theme_park", "time_bucket": "morning", "lat": 35.6267, "lon": 139.8851}
+    ]
+  }
+]

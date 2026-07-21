@@ -4,14 +4,39 @@ import type { ItineraryDay } from "@/components/planner/TravelItinerary";
 import { api } from "@/service/api";
 import { createClientId } from "@/lib/ids";
 
-export type TravelPlanTemplate = "basic" | "spreadsheet";
+export type TravelPlanTemplate = "basic" | "spreadsheet" | "timeline" | "route_sheet";
 export type TravelPlanTier = "FREE" | "PENDING_PAID" | "PAID";
+export type TravelCountryCode = "KR" | "JP";
+export type CompanionType =
+    | "unknown"
+    | "solo"
+    | "couple"
+    | "friends"
+    | "parents_only"
+    | "family_with_young_child"
+    | "family_with_child"
+    | "family_with_teen"
+    | "multi_generation";
+export type ChildAgeBucket = "none" | "unknown" | "infant" | "toddler" | "preschool" | "lower_elementary" | "upper_elementary" | "teen";
+export type GroupAgeBucket = "unknown" | "10s" | "20s" | "30s" | "40s" | "50s" | "60s_plus" | "mixed";
+export type SeasonBucket = "unknown" | "spring" | "summer" | "rainy" | "autumn" | "winter";
+
+export type TravelPlanTripContext = {
+    countryCode: TravelCountryCode;
+    companionType: CompanionType;
+    childAgeBucket: ChildAgeBucket;
+    groupAgeBucket: GroupAgeBucket;
+    monthBucket: string;
+    seasonBucket: SeasonBucket;
+    rainySeason: boolean;
+};
 
 export type TravelPlanDraft = {
     id: string;
     title: string;
     template: TravelPlanTemplate;
     tier: TravelPlanTier;
+    tripContext: TravelPlanTripContext;
     checklist: ChecklistItem[];
     days: ItineraryDay[];
     participants: Participant[];
@@ -53,6 +78,15 @@ export function createEmptyTravelPlan(
         title,
         template,
         tier,
+        tripContext: {
+            countryCode: "KR",
+            companionType: "unknown",
+            childAgeBucket: "unknown",
+            groupAgeBucket: "unknown",
+            monthBucket: "unknown",
+            seasonBucket: "unknown",
+            rainySeason: false,
+        },
         checklist: [],
         days: [],
         participants: [],
@@ -152,6 +186,79 @@ export async function loadTravelPlanIndex(): Promise<TravelPlanIndexItem[]> {
     return response.data;
 }
 
+export function createTimelineTravelPlan(id: string, title = "트립 보드 여행 일정", tier: TravelPlanTier = "FREE"): TravelPlanDraft {
+    const plan = createEmptyTravelPlan(id, title, "timeline", tier);
+    plan.days = ["도착과 적응", "핵심 코스", "여유와 귀가"].map((dayTitle, dayIndex) => ({
+        id: createClientId("day"),
+        date: "",
+        dayTitle: `Day ${dayIndex + 1} · ${dayTitle}`,
+        activities: [
+            {
+                id: createClientId("activity"),
+                time: dayIndex === 0 ? "10:00" : "09:30",
+                location: "",
+                activity: dayIndex === 0 ? "체크인 전 가볍게 둘러보기" : "오늘의 메인 스팟",
+                cost: 0,
+                routeRole: dayIndex === 0 ? "START" : "NONE",
+            },
+            {
+                id: createClientId("activity"),
+                time: "13:00",
+                location: "",
+                activity: "점심과 주변 산책",
+                cost: 0,
+                routeRole: "NONE",
+            },
+            {
+                id: createClientId("activity"),
+                time: dayIndex === 2 ? "17:00" : "19:00",
+                location: "",
+                activity: dayIndex === 2 ? "기념품 정리와 이동" : "저녁 코스",
+                cost: 0,
+                routeRole: dayIndex === 2 ? "END" : "NONE",
+            },
+        ],
+    }));
+    return plan;
+}
+
+export function createRouteSheetTravelPlan(id: string, title = "Route Plan 여행 일정", tier: TravelPlanTier = "FREE"): TravelPlanDraft {
+    const plan = createEmptyTravelPlan(id, title, "route_sheet", tier);
+    plan.days = [{
+        id: createClientId("day"),
+        date: "",
+        dayTitle: "DAY 1",
+        activities: [
+            routeSheetStop("09:00", "첫 번째 장소", "도착 및 주변 둘러보기", "40분", "START", "#16a34a"),
+            routeSheetStop("11:00", "두 번째 장소", "대표 스팟 방문", "1시간", "NONE", "#2563eb"),
+            routeSheetStop("13:00", "점심 장소", "식사와 휴식", "1시간 20분", "NONE", "#d97706"),
+            routeSheetStop("15:30", "세 번째 장소", "예약 일정 진행", "1시간", "NONE", "#7c3aed"),
+            routeSheetStop("18:00", "마지막 장소", "저녁 일정 후 이동", "50분", "END", "#e11d48"),
+        ],
+    }];
+    return plan;
+}
+
+function routeSheetStop(
+    time: string,
+    location: string,
+    activity: string,
+    duration: string,
+    routeRole: "NONE" | "START" | "END" = "NONE",
+    markerColor?: string,
+): ItineraryDay["activities"][number] {
+    return {
+        id: createClientId("activity"),
+        time,
+        location,
+        activity,
+        cost: 0,
+        placeSubtitle: duration,
+        markerColor,
+        routeRole,
+    };
+}
+
 export async function loadSharedTravelPlanIndex(): Promise<TravelPlanIndexItem[]> {
     const response = await api.get<TravelPlanIndexItem[]>("/api/travel-plans/shared");
     return response.data;
@@ -194,6 +301,15 @@ function normalizePlan(plan: Partial<TravelPlanDraft> & { id: string }): TravelP
         title: plan.title ?? "여행 계획",
         template: plan.template ?? "basic",
         tier: plan.tier ?? "FREE",
+        tripContext: {
+            countryCode: plan.tripContext?.countryCode ?? "KR",
+            companionType: plan.tripContext?.companionType ?? "unknown",
+            childAgeBucket: plan.tripContext?.childAgeBucket ?? "unknown",
+            groupAgeBucket: plan.tripContext?.groupAgeBucket ?? "unknown",
+            monthBucket: plan.tripContext?.monthBucket ?? "unknown",
+            seasonBucket: plan.tripContext?.seasonBucket ?? "unknown",
+            rainySeason: Boolean(plan.tripContext?.rainySeason),
+        },
         checklist: plan.checklist ?? [],
         days: plan.days ?? [],
         participants: plan.participants ?? [],

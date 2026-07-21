@@ -1,0 +1,12 @@
+{
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3308,
+    "database": "infp",
+    "user": "root",
+    "password": "infp"
+  },
+  "dataset_output": "ml/recommender/artifacts/dataset.json",
+  "osm_seed_output": "ml/recommender/artifacts/osm_places.jsonl",
+  "train_output_dir": "ml/recommender/artifacts"
+}

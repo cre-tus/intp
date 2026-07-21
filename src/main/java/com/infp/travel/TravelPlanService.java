@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -53,6 +54,75 @@ public class TravelPlanService {
     }
 
     @Transactional
+    public TravelPlanResponse copyFromSharedPlan(long userId, TravelPlanEntity source) {
+        return copyFromSharedPlan(userId, source, source == null ? "" : displayName(source.getOwner()));
+    }
+
+    @Transactional
+    public TravelPlanResponse copyFromSharedPlan(long userId, TravelPlanEntity source, String sourceAuthorName) {
+        if (source == null) {
+            throw new IllegalArgumentException("복사할 여행 계획을 찾을 수 없습니다.");
+        }
+
+        String copiedId = UUID.randomUUID().toString();
+        String copiedTitle = copiedPlanTitle(source.getTitle(), sourceAuthorName);
+        JsonNode copiedContent = parseJson(source.getContentJson());
+        if (copiedContent instanceof ObjectNode objectNode) {
+            objectNode.put("id", copiedId);
+            objectNode.put("title", copiedTitle);
+            objectNode.put("tier", "FREE");
+            objectNode.set("participants", objectMapper.createArrayNode());
+            regenerateCopiedContentIds(objectNode);
+        }
+
+        User owner = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        copiedContent = contentWithCanonicalOwner(copiedContent, owner);
+
+        TravelPlanEntity copied = new TravelPlanEntity();
+        copied.setExternalId(copiedId);
+        copied.setOwner(owner);
+        copied.setTitle(copiedTitle);
+        copied.setTemplate(normalizeTemplate(source.getTemplate()));
+        copied.setTier("FREE");
+        copied.setContentJson(toJson(copiedContent));
+        copied.setStartDate(firstDate(copiedContent));
+        copied.setEndDate(lastDate(copiedContent, copied.getStartDate()));
+
+        TravelPlanEntity saved = repository.saveAndFlush(copied);
+        ensureOwnerMember(saved, userId);
+        return toResponse(saved);
+    }
+
+    private void regenerateCopiedContentIds(ObjectNode content) {
+        JsonNode days = content.get("days");
+        if (days != null && days.isArray()) {
+            for (JsonNode day : days) {
+                if (!(day instanceof ObjectNode dayNode)) continue;
+                dayNode.put("id", UUID.randomUUID().toString());
+
+                JsonNode activities = dayNode.get("activities");
+                if (activities != null && activities.isArray()) {
+                    for (JsonNode activity : activities) {
+                        if (activity instanceof ObjectNode activityNode) {
+                            activityNode.put("id", UUID.randomUUID().toString());
+                        }
+                    }
+                }
+            }
+        }
+
+        JsonNode checklist = content.get("checklist");
+        if (checklist != null && checklist.isArray()) {
+            for (JsonNode item : checklist) {
+                if (item instanceof ObjectNode itemNode) {
+                    itemNode.put("id", Math.abs(UUID.randomUUID().getMostSignificantBits()));
+                }
+            }
+        }
+    }
+
+    @Transactional
     public TravelPlanResponse save(long userId, TravelPlanRequest request) {
         String externalId = requireText(request.id(), "계획 ID가 필요합니다.");
         JsonNode content = request.content() == null ? objectMapper.createObjectNode() : request.content();
@@ -69,7 +139,7 @@ public class TravelPlanService {
         content = contentWithCanonicalOwner(content, entity.getOwner());
 
         entity.setTitle(requireText(request.title(), "제목이 필요합니다."));
-        entity.setTemplate(blankToDefault(request.template(), "basic"));
+        entity.setTemplate(normalizeTemplate(request.template()));
         entity.setTier(blankToDefault(request.tier(), "FREE"));
         entity.setContentJson(toJson(content));
         entity.setStartDate(firstDate(content));
@@ -472,13 +542,19 @@ public class TravelPlanService {
             JsonNode day = days.get(dayIndex);
             JsonNode activities = day.get("activities");
             if (activities == null || !activities.isArray()) continue;
+            Set<String> usedRowKeys = new HashSet<>();
 
             for (int rowIndex = 0; rowIndex < activities.size(); rowIndex += 1) {
                 JsonNode activity = activities.get(rowIndex);
                 String rowKey = text(activity, "time");
                 if (rowKey.isBlank()) continue;
+                String storageRowKey = uniqueRowKey(limitText(rowKey, 140), rowIndex, usedRowKeys);
+                String externalDayId = text(day, "id");
+                if (externalDayId.isBlank()) externalDayId = "__day__" + (dayIndex + 1);
+                externalDayId = limitText(externalDayId, 100);
+                String externalActivityId = limitText(text(activity, "id"), 100);
                 String value = firstText(activity, "activity", "location");
-                Integer cost = intValue(activity, "cost");
+                Integer cost = Math.max(0, intValue(activity, "cost"));
                 jdbcTemplate.update("""
                                 INSERT INTO plan_spreadsheet_cells (
                                     plan_id, external_day_id, external_activity_id, day_number, row_order,
@@ -487,19 +563,19 @@ public class TravelPlanService {
                                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
                                 """,
                         entity.getId(),
-                        text(day, "id"),
-                        text(activity, "id"),
+                        externalDayId,
+                        externalActivityId,
                         dayIndex + 1,
                         rowIndex + 1,
-                        rowKey,
-                        rowLabel(rowKey),
+                        storageRowKey,
+                        limitText(rowLabel(rowKey), 120),
                         value,
                         cost,
-                        text(activity, "placeId"),
-                        text(activity, "placeSubtitle"),
+                        limitText(text(activity, "placeId"), 128),
+                        limitText(text(activity, "placeSubtitle"), 400),
                         doubleValue(activity, "lat"),
                         doubleValue(activity, "lon"),
-                        blankToDefault(text(activity, "routeRole"), "NONE")
+                        normalizeRouteRole(text(activity, "routeRole"))
                 );
             }
         }
@@ -597,6 +673,17 @@ public class TravelPlanService {
         return rowKey;
     }
 
+    private static String uniqueRowKey(String rowKey, int rowIndex, Set<String> usedRowKeys) {
+        String candidate = rowKey;
+        if (usedRowKeys.add(candidate)) return candidate;
+
+        candidate = rowKey + "__copy__" + (rowIndex + 1);
+        while (!usedRowKeys.add(candidate)) {
+            candidate = candidate + "_";
+        }
+        return candidate;
+    }
+
     private static String firstText(JsonNode node, String first, String second) {
         String firstValue = text(node, first);
         return firstValue.isBlank() ? text(node, second) : firstValue;
@@ -624,6 +711,32 @@ public class TravelPlanService {
 
     private static String blankToDefault(String value, String fallback) {
         return value == null || value.trim().isBlank() ? fallback : value.trim();
+    }
+
+    private static String limitText(String value, int maxLength) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
+    }
+
+    private static String copiedPlanTitle(String sourceTitle, String sourceAuthorName) {
+        String author = limitText(blankToDefault(sourceAuthorName, "공유자"), 30);
+        String suffix = " - " + author + "님 공유 일정 복사됨";
+        String base = blankToDefault(sourceTitle, "공유 여행 계획");
+        int maxBaseLength = Math.max(1, 120 - suffix.length());
+        return limitText(base, maxBaseLength) + suffix;
+    }
+
+    private static String normalizeTemplate(String value) {
+        String template = blankToDefault(value, "basic");
+        return List.of("basic", "spreadsheet", "timeline", "route_sheet").contains(template) ? template : "basic";
+    }
+
+    private static String normalizeRouteRole(String value) {
+        String role = value == null || value.isBlank()
+                ? "NONE"
+                : value.trim().toUpperCase(Locale.ROOT);
+        return List.of("NONE", "LODGING", "START", "END", "FIXED").contains(role) ? role : "NONE";
     }
 
     private static String normalizeRole(String value, String fallback) {

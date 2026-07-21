@@ -10,7 +10,7 @@ export default function CostField(props: {
     };
 
     return (
-        <div className="w-full rounded-lg border-2 border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2 sm:w-[120px]">
+        <div className="planner-cost-field w-full rounded-lg border-2 border-gray-300 bg-gradient-to-r from-gray-100 to-gray-50 px-3 py-2 sm:w-[120px]">
             <input
                 type="text"
                 inputMode="numeric"
@@ -18,7 +18,7 @@ export default function CostField(props: {
                 value={props.value ? props.value.toLocaleString() : ""}
                 onChange={(e) => handleChange(e.target.value)}
                 placeholder="경비"
-                className="w-full bg-transparent font-bold text-gray-900 focus:outline-none"
+                className="planner-inline-input w-full bg-transparent font-bold text-gray-900 focus:outline-none"
             />
         </div>
     );

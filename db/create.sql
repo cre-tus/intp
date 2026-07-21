@@ -44,7 +44,7 @@ CREATE TABLE plans (
     start_date DATE NOT NULL COMMENT '여행 시작일',
     end_date DATE NOT NULL COMMENT '여행 종료일',
     visibility ENUM('PRIVATE','SHARED') NOT NULL DEFAULT 'PRIVATE' COMMENT '공개 여부',
-    template ENUM('basic','spreadsheet') NOT NULL DEFAULT 'basic' COMMENT '템플릿 형식',
+    template ENUM('basic','spreadsheet','timeline','route_sheet') NOT NULL DEFAULT 'basic' COMMENT '템플릿 형식',
     tier ENUM('FREE','PENDING_PAID','PAID') NOT NULL DEFAULT 'FREE' COMMENT '템플릿 결제 등급',
     content_json LONGTEXT NULL COMMENT '프론트 여행 계획 전체 JSON 스냅샷',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),

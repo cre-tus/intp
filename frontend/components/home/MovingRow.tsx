@@ -36,9 +36,17 @@ export default function MovingRow({ children }: { children: React.ReactNode }) {
             setFocusX(rowCenter - cardCenterWithoutTransform);
             setFocused(true);
         };
+        const clearFocusCity = () => {
+            setFocused(false);
+            setFocusX(0);
+        };
 
         window.addEventListener("home:focus-city", focusCity);
-        return () => window.removeEventListener("home:focus-city", focusCity);
+        window.addEventListener("home:clear-focus-city", clearFocusCity);
+        return () => {
+            window.removeEventListener("home:focus-city", focusCity);
+            window.removeEventListener("home:clear-focus-city", clearFocusCity);
+        };
     }, []);
 
     return (

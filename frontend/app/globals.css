@@ -20,8 +20,7 @@ a {
 }
 
 .moving-row:hover .moving-wrap,
-.moving-row:focus-within .moving-wrap,
-body:has(.tokyo-recommendation-modal) .moving-wrap {
+.moving-row:focus-within .moving-wrap {
     animation-play-state: paused;
 }
 
@@ -103,6 +102,23 @@ body:has(.tokyo-recommendation-modal) .moving-wrap {
     background-image: linear-gradient(to left, rgb(var(--home-fade-rgb)), rgb(var(--home-fade-rgb) / 0));
 }
 
+.community-input {
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid #d1d5db;
+    background: #ffffff;
+    padding: 0.5rem 0.75rem;
+    color: #111827;
+    font-size: 0.875rem;
+    font-weight: 600;
+    outline: none;
+}
+
+.community-input:focus {
+    border-color: #111827;
+    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.12);
+}
+
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
@@ -129,6 +145,15 @@ body {
     }
     .bg-emerald-50 {
         background-color: rgba(16, 185, 129, 0.1) !important;
+    }
+    .bg-green-50 {
+        background-color: rgba(20, 83, 45, 0.18) !important;
+    }
+    .bg-orange-50 {
+        background-color: rgba(154, 52, 18, 0.16) !important;
+    }
+    .bg-sky-50 {
+        background-color: rgba(12, 74, 110, 0.18) !important;
     }
     .bg-red-50 {
         background-color: rgba(239, 68, 68, 0.1) !important;
@@ -221,6 +246,45 @@ body {
     input::placeholder,
     textarea::placeholder {
         color: #4b5563 !important; /* Muted dark placeholder */
+    }
+
+    .planner-inline-input,
+    .planner-inline-select {
+        background-color: transparent !important;
+        border-color: transparent !important;
+    }
+
+    .planner-activity-field,
+    .planner-cost-field,
+    .planner-route-field,
+    .planner-time-field {
+        background: rgba(15, 23, 42, 0.72) !important;
+        border-color: #293548 !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+    }
+
+    .planner-activity-field:focus-within,
+    .planner-cost-field:focus-within,
+    .planner-route-field:focus-within,
+    .planner-time-field:focus-within {
+        background: rgba(17, 24, 39, 0.92) !important;
+        border-color: #64748b !important;
+        box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.14) !important;
+    }
+
+    .planner-day-title-input {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        border-color: rgba(255, 255, 255, 0.18) !important;
+        color: #ffffff !important;
+    }
+
+    .planner-day-title-input:focus {
+        background-color: rgba(255, 255, 255, 0.14) !important;
+        border-color: rgba(255, 255, 255, 0.35) !important;
+    }
+
+    .planner-field-icon {
+        color: #94a3b8 !important;
     }
 
     /* 6. Admin, Buttons and Specific Interactive Overrides */

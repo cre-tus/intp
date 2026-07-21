@@ -11,6 +11,8 @@ interface Me {
     firstName?: string;
     lastName?: string;
     birth?: string;
+    statusMessage?: string;
+    profileImageUrl?: string;
 }
 
 

@@ -3,6 +3,7 @@ package com.infp.auth.controller;
 import com.infp.auth.dto.EmailCheckResponse;
 import com.infp.auth.dto.LoginRequest;
 import com.infp.auth.dto.MeResponse;
+import com.infp.auth.dto.ProfileUpdateRequest;
 import com.infp.auth.dto.RegisterRequest;
 import com.infp.auth.jwt.JwtAuthFilter;
 import com.infp.auth.service.AuthService;
@@ -166,13 +167,50 @@ public class AuthController {
                                 user.getRole().name(),
                                 user.getFirstName(),
                                 user.getLastName(),
-                                user.getBirth() == null ? null : user.getBirth().toString()
+                                user.getBirth() == null ? null : user.getBirth().toString(),
+                                user.getStatusMessage(),
+                                user.getProfileImageUrl()
                         )
                 ))
                 .orElseGet(() -> ResponseEntity.status(401).build());
     }
 
     //로그아웃 시 쿠키 삭제
+    @PutMapping("/profile")
+    public ResponseEntity<MeResponse> updateProfile(
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal,
+            @RequestBody ProfileUpdateRequest request
+    ) {
+        if (principal == null) {
+            return ResponseEntity.status(401).build();
+        }
+
+        return userRepository.findById(principal.userId())
+                .map(user -> {
+                    user.setStatusMessage(limit(request.statusMessage(), 160));
+                    user.setProfileImageUrl(limit(request.profileImageUrl(), 600_000));
+                    userRepository.save(user);
+                    return ResponseEntity.ok(new MeResponse(
+                            user.getId(),
+                            user.getEmail(),
+                            user.getNickname(),
+                            user.getRole().name(),
+                            user.getFirstName(),
+                            user.getLastName(),
+                            user.getBirth() == null ? null : user.getBirth().toString(),
+                            user.getStatusMessage(),
+                            user.getProfileImageUrl()
+                    ));
+                })
+                .orElseGet(() -> ResponseEntity.status(401).build());
+    }
+
+    private String limit(String value, int maxLength) {
+        if (value == null || value.trim().isBlank()) return null;
+        String trimmed = value.trim();
+        return trimmed.length() > maxLength ? trimmed.substring(0, maxLength) : trimmed;
+    }
+
     private ResponseCookie deleteCookie(String name) {
         return ResponseCookie.from(name, "")
                 .path("/")

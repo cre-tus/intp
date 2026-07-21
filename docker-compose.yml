@@ -35,7 +35,8 @@ services:
       - gtfs_postgis_data:/var/lib/postgresql/data
       - ./db/postgis_create.sql:/docker-entrypoint-initdb.d/01_postgis_create.sql:ro
       - ./db/postgis_insert.sql:/docker-entrypoint-initdb.d/02_postgis_insert.sql:ro
-      - ./db/gtfs/tokyo_rail:/gtfs/tokyo_rail:ro
+      - ./db/gtfs/korea_national:/gtfs/active:ro
+      - ./db/gtfs:/gtfs/all:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
@@ -54,6 +55,10 @@ services:
         condition: service_started
       gtfs-postgis:
         condition: service_healthy
+      nominatim:
+        condition: service_started
+      nominatim-jp:
+        condition: service_started
     environment:
       JWT_SECRET: ${JWT_SECRET}
       SPRING_PROFILES_ACTIVE: docker
@@ -71,7 +76,11 @@ services:
       GTFS_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
       GOOGLE_MAP_API: ${GOOGLE_MAP_API:-}
       GOOGLE_PRIVATE_API: ${GOOGLE_PRIVATE_API:-}
+      GTFS_DATASET_DIRS: /app/db/gtfs/korea_national,/app/db/gtfs/tokyo_rail
+      GTFS_LOAD_ROUTE_NAMES: ${GTFS_LOAD_ROUTE_NAMES:-false}
       TZ: Asia/Seoul
+    volumes:
+      - ./db/gtfs:/app/db/gtfs:ro
   frontend:
     image: node:20-alpine
     container_name: infp-frontend
@@ -127,7 +136,7 @@ services:
     container_name: nominatim
     restart: unless-stopped
     environment:
-      PBF_PATH: /data/kanto-260209.osm.pbf
+      PBF_PATH: /data/south-korea-latest.osm.pbf
       THREADS: 16
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
     volumes:
@@ -135,9 +144,23 @@ services:
       - nominatim_data:/var/lib/postgresql/14/main
     shm_size: 4gb
 
+  nominatim-jp:
+    image: mediagis/nominatim:4.4
+    container_name: nominatim-jp
+    restart: unless-stopped
+    environment:
+      PBF_PATH: /data/kanto-260209.osm.pbf
+      THREADS: 16
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
+    volumes:
+      - ./nominatim/pbf:/data
+      - nominatim_jp_data:/var/lib/postgresql/14/main
+    shm_size: 4gb
+
 volumes:
   mysql_data:
   gtfs_postgis_data:
   nominatim_data:
+  nominatim_jp_data:
   frontend_node_modules:
   frontend_next:

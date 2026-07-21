@@ -113,10 +113,11 @@ CREATE TABLE gtfs.stop_times (
 );
 
 CREATE TABLE gtfs.transfers (
-    from_trip_id text REFERENCES gtfs.trips(trip_id),
-    to_trip_id text REFERENCES gtfs.trips(trip_id),
+    from_stop_id text REFERENCES gtfs.stops(stop_id),
+    to_stop_id text REFERENCES gtfs.stops(stop_id),
     transfer_type integer,
-    PRIMARY KEY (from_trip_id, to_trip_id)
+    min_transfer_time integer,
+    PRIMARY KEY (from_stop_id, to_stop_id)
 );
 
 CREATE TABLE gtfs.translations (

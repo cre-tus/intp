@@ -11,26 +11,43 @@ import java.util.Map;
 @Component
 public class NominatimClient {
 
-    private final WebClient webClient;
+    private final WebClient koreaWebClient;
+    private final WebClient japanWebClient;
 
     public NominatimClient(WebClient.Builder builder) {
-        this.webClient = builder
-                .baseUrl("http://nominatim:8080") // 도커 내부 주소
+        this.koreaWebClient = builder
+                .baseUrl("http://nominatim:8080")
+                .build();
+        this.japanWebClient = builder.clone()
+                .baseUrl("http://nominatim-jp:8080")
                 .build();
     }
 
-    public Mono<List<Map<String, Object>>> search(String query) {
-        return webClient.get()
+    public Mono<List<Map<String, Object>>> search(String query, String countryCode) {
+        String normalizedCountry = normalizeCountry(countryCode);
+        WebClient targetClient = "jp".equals(normalizedCountry) ? japanWebClient : koreaWebClient;
+
+        return targetClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path("/search")
                         .queryParam("format", "jsonv2")
                         .queryParam("limit", 6)
                         .queryParam("namedetails", 1)
-                        .queryParam("accept-language", "ko,en,ja")
+                        .queryParam("accept-language", "jp".equals(normalizedCountry) ? "ja,ko,en" : "ko,en,ja")
+                        .queryParam("countrycodes", normalizedCountry)
                         .queryParam("q", query)
                         .build())
                 .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {}) // Java 런타임에서 제네릭 정보를 잃기에 "ParameterizedTypeReference" 사용하여 타입 정보 유지
+                .bodyToMono(new ParameterizedTypeReference<List<Map<String, Object>>>() {})
                 .onErrorReturn(List.of());
+    }
+
+    private static String normalizeCountry(String countryCode) {
+        if (countryCode == null) return "kr";
+        return switch (countryCode.trim().toUpperCase()) {
+            case "JP", "JPN", "JA" -> "jp";
+            case "KR", "KOR", "KO" -> "kr";
+            default -> "kr";
+        };
     }
 }

@@ -1,0 +1,1599 @@
+{
+  "age_to_idx": {
+    "unknown": 0,
+    "10s": 1,
+    "20s": 2,
+    "30s": 3,
+    "40s": 4,
+    "50s": 5,
+    "60s_plus": 6
+  },
+  "time_to_idx": {
+    "morning": 0,
+    "lunch": 1,
+    "afternoon": 2,
+    "evening": 3,
+    "night": 4,
+    "unknown": 5
+  },
+  "companion_to_idx": {
+    "unknown": 0,
+    "solo": 1,
+    "couple": 2,
+    "friends": 3,
+    "parents_only": 4,
+    "family_with_young_child": 5,
+    "family_with_child": 6,
+    "family_with_teen": 7,
+    "multi_generation": 8
+  },
+  "child_age_to_idx": {
+    "none": 0,
+    "unknown": 1,
+    "infant": 2,
+    "toddler": 3,
+    "preschool": 4,
+    "lower_elementary": 5,
+    "upper_elementary": 6,
+    "teen": 7
+  },
+  "group_age_to_idx": {
+    "unknown": 0,
+    "10s": 1,
+    "20s": 2,
+    "30s": 3,
+    "40s": 4,
+    "50s": 5,
+    "60s_plus": 6,
+    "mixed": 7
+  },
+  "month_to_idx": {
+    "unknown": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
+    "7": 7,
+    "8": 8,
+    "9": 9,
+    "10": 10,
+    "11": 11,
+    "12": 12
+  },
+  "season_to_idx": {
+    "unknown": 0,
+    "spring": 1,
+    "summer": 2,
+    "rainy": 3,
+    "autumn": 4,
+    "winter": 5
+  },
+  "place_to_idx": {
+    "akihabara_35.698_139.773": 0,
+    "divercity_tokyo_plaza_35.625_139.776": 1,
+    "ginza_sanrio_35.672_139.765": 2,
+    "hanayashiki_amusement_park_35.715_139.794": 3,
+    "kappabashi_dougu_street_35.715_139.789": 4,
+    "mark_is_minatomirai_35.458_139.633": 5,
+    "marunouchi_35.681_139.767": 6,
+    "narita_airport_35.772_140.393": 7,
+    "odaiba_35.626_139.776": 8,
+    "osm_node_1206922801": 9,
+    "osm_node_1244320134": 10,
+    "osm_node_1244321997": 11,
+    "osm_node_1244322003": 12,
+    "osm_node_1264376401": 13,
+    "osm_node_1514819319": 14,
+    "osm_node_1519553730": 15,
+    "osm_node_1554997456": 16,
+    "osm_node_1669503978": 17,
+    "osm_node_1669503979": 18,
+    "osm_node_1669503980": 19,
+    "osm_node_1669736660": 20,
+    "osm_node_1669736680": 21,
+    "osm_node_1669790050": 22,
+    "osm_node_1669816993": 23,
+    "osm_node_1669817048": 24,
+    "osm_node_1670384191": 25,
+    "osm_node_1678311464": 26,
+    "osm_node_1687929745": 27,
+    "osm_node_1695441365": 28,
+    "osm_node_1753356352": 29,
+    "osm_node_1768341570": 30,
+    "osm_node_1768341623": 31,
+    "osm_node_1768673322": 32,
+    "osm_node_1784718847": 33,
+    "osm_node_1794115506": 34,
+    "osm_node_250668618": 35,
+    "osm_node_250668627": 36,
+    "osm_node_251055430": 37,
+    "osm_node_251055433": 38,
+    "osm_node_251055436": 39,
+    "osm_node_251055437": 40,
+    "osm_node_252675438": 41,
+    "osm_node_259964052": 42,
+    "osm_node_260158760": 43,
+    "osm_node_260207768": 44,
+    "osm_node_260906693": 45,
+    "osm_node_265050644": 46,
+    "osm_node_265050657": 47,
+    "osm_node_265050658": 48,
+    "osm_node_275605844": 49,
+    "osm_node_277836382": 50,
+    "osm_node_278227262": 51,
+    "osm_node_295394438": 52,
+    "osm_node_297045188": 53,
+    "osm_node_297045189": 54,
+    "osm_node_297161665": 55,
+    "osm_node_297164363": 56,
+    "osm_node_297164401": 57,
+    "osm_node_297253620": 58,
+    "osm_node_297271602": 59,
+    "osm_node_297271717": 60,
+    "osm_node_297271957": 61,
+    "osm_node_297275264": 62,
+    "osm_node_298428710": 63,
+    "osm_node_301584380": 64,
+    "osm_node_302017808": 65,
+    "osm_node_302022636": 66,
+    "osm_node_302164577": 67,
+    "osm_node_303781761": 68,
+    "osm_node_303781764": 69,
+    "osm_node_304417962": 70,
+    "osm_node_304805567": 71,
+    "osm_node_304805570": 72,
+    "osm_node_304805573": 73,
+    "osm_node_343379817": 74,
+    "osm_node_352943820": 75,
+    "osm_node_422442790": 76,
+    "osm_node_422442792": 77,
+    "osm_node_465307696": 78,
+    "osm_node_465483323": 79,
+    "osm_node_477366417": 80,
+    "osm_node_495989498": 81,
+    "osm_node_495989500": 82,
+    "osm_node_495989501": 83,
+    "osm_node_495989502": 84,
+    "osm_node_495989505": 85,
+    "osm_node_495989506": 86,
+    "osm_node_495989510": 87,
+    "osm_node_501782671": 88,
+    "osm_node_506232954": 89,
+    "osm_node_506232962": 90,
+    "osm_node_559389812": 91,
+    "osm_node_582785792": 92,
+    "osm_node_598510950": 93,
+    "osm_node_598512769": 94,
+    "osm_node_692545062": 95,
+    "osm_node_694178451": 96,
+    "osm_node_694218740": 97,
+    "osm_node_707155538": 98,
+    "osm_node_707155539": 99,
+    "osm_node_720631932": 100,
+    "osm_node_764392330": 101,
+    "osm_node_764392331": 102,
+    "osm_node_765589832": 103,
+    "osm_node_775442521": 104,
+    "osm_node_777609440": 105,
+    "osm_node_791502435": 106,
+    "osm_node_791502463": 107,
+    "osm_node_791502470": 108,
+    "osm_node_792619975": 109,
+    "osm_node_792896152": 110,
+    "osm_node_792896162": 111,
+    "osm_node_792896181": 112,
+    "osm_node_792896219": 113,
+    "osm_node_792896225": 114,
+    "osm_node_792896230": 115,
+    "osm_node_792896242": 116,
+    "osm_node_792896291": 117,
+    "osm_node_792896299": 118,
+    "osm_node_794322494": 119,
+    "osm_node_794415286": 120,
+    "osm_node_794417287": 121,
+    "shibuya_parco_35.662_139.699": 122,
+    "shinjuku_prince_hotel_35.694_139.701": 123,
+    "sunshine_city_35.729_139.718": 124,
+    "tokyo_character_street_35.681_139.767": 125,
+    "tokyo_disneyland_35.633_139.88": 126,
+    "tokyo_disneysea_35.627_139.885": 127,
+    "yokohama_anpanman_children_s_museum_35.462_139.625": 128,
+    "기치조지_35.703_139.58": 129,
+    "긴자_35.672_139.765": 130,
+    "나카메구로_35.644_139.699": 131,
+    "도요스_시장_35.643_139.781": 132,
+    "도쿄역_마루노우치_35.681_139.767": 133,
+    "도쿄타워_35.659_139.745": 134,
+    "롯폰기_힐즈_35.66_139.729": 135,
+    "메이지_신궁_35.676_139.699": 136,
+    "시부야_스크램블_교차로_35.66_139.701": 137,
+    "신주쿠_교엔_35.685_139.71": 138,
+    "신주쿠역_인근_호텔_35.691_139.7": 139,
+    "아사쿠사_센소지_35.715_139.797": 140,
+    "아키하바라_35.698_139.773": 141,
+    "에비스_35.647_139.71": 142,
+    "오다이바_35.626_139.776": 143,
+    "오모이데요코초_35.694_139.699": 144,
+    "오모테산도_35.665_139.712": 145,
+    "우에노_아메요코_35.708_139.774": 146,
+    "이노카시라_공원_35.7_139.577": 147,
+    "츠키지_장외시장_35.666_139.771": 148,
+    "하네다_공항_35.549_139.78": 149,
+    "하라주쿠_다케시타도리_35.672_139.703": 150
+  },
+  "category_to_idx": {
+    "food": 0,
+    "kid_museum": 1,
+    "landmark": 2,
+    "museum": 3,
+    "park": 4,
+    "place": 5,
+    "shopping": 6,
+    "station": 7,
+    "theme_park": 8,
+    "viewpoint": 9
+  },
+  "places": [
+    {
+      "id": "akihabara_35.698_139.773",
+      "name": "Akihabara",
+      "category": "shopping",
+      "lat": 35.6984,
+      "lon": 139.773,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "divercity_tokyo_plaza_35.625_139.776",
+      "name": "DiverCity Tokyo Plaza",
+      "category": "shopping",
+      "lat": 35.6252,
+      "lon": 139.7758,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "ginza_sanrio_35.672_139.765",
+      "name": "Ginza Sanrio",
+      "category": "shopping",
+      "lat": 35.6719,
+      "lon": 139.765,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "hanayashiki_amusement_park_35.715_139.794",
+      "name": "Hanayashiki Amusement Park",
+      "category": "theme_park",
+      "lat": 35.715,
+      "lon": 139.7945,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "kappabashi_dougu_street_35.715_139.789",
+      "name": "Kappabashi Dougu Street",
+      "category": "shopping",
+      "lat": 35.7146,
+      "lon": 139.7888,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "mark_is_minatomirai_35.458_139.633",
+      "name": "MARK IS Minatomirai",
+      "category": "shopping",
+      "lat": 35.4578,
+      "lon": 139.6328,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "marunouchi_35.681_139.767",
+      "name": "Marunouchi",
+      "category": "shopping",
+      "lat": 35.6812,
+      "lon": 139.7671,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "narita_airport_35.772_140.393",
+      "name": "Narita Airport",
+      "category": "station",
+      "lat": 35.7719,
+      "lon": 140.3929,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "odaiba_35.626_139.776",
+      "name": "Odaiba",
+      "category": "park",
+      "lat": 35.6256,
+      "lon": 139.7757,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1206922801",
+      "name": "クラーク博士像",
+      "category": "landmark",
+      "lat": 43.070738,
+      "lon": 141.343424,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1244320134",
+      "name": "大麻体育館",
+      "category": "landmark",
+      "lat": 43.0754306,
+      "lon": 141.4933876,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1244321997",
+      "name": "江別市東野幌体育館",
+      "category": "landmark",
+      "lat": 43.0946392,
+      "lon": 141.539349,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1244322003",
+      "name": "江別市民体育館",
+      "category": "landmark",
+      "lat": 43.0962571,
+      "lon": 141.5261605,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1264376401",
+      "name": "ありのす公園",
+      "category": "landmark",
+      "lat": 43.0140969,
+      "lon": 141.4872176,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1514819319",
+      "name": "札幌台",
+      "category": "viewpoint",
+      "lat": 42.9571605,
+      "lon": 141.4170172,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1519553730",
+      "name": "ホテルマイステイズプレミア札幌パーク",
+      "category": "landmark",
+      "lat": 43.0495311,
+      "lon": 141.3569474,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1554997456",
+      "name": "アダージョ",
+      "category": "food",
+      "lat": 43.0444608,
+      "lon": 141.2991069,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669503978",
+      "name": "純喫茶オリンピア",
+      "category": "food",
+      "lat": 43.0652317,
+      "lon": 141.347024,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669503979",
+      "name": "バンビ",
+      "category": "food",
+      "lat": 43.0655558,
+      "lon": 141.3468958,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669503980",
+      "name": "ドトールコーヒーショップ",
+      "category": "food",
+      "lat": 43.0646819,
+      "lon": 141.3466597,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669736660",
+      "name": "アトリエ・モリヒコ",
+      "category": "food",
+      "lat": 43.0574533,
+      "lon": 141.3393997,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669736680",
+      "name": "necco",
+      "category": "landmark",
+      "lat": 43.0570652,
+      "lon": 141.33933,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669790050",
+      "name": "月見軒",
+      "category": "food",
+      "lat": 43.0676395,
+      "lon": 141.3453006,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669816993",
+      "name": "上々颱風",
+      "category": "food",
+      "lat": 43.0673965,
+      "lon": 141.3474356,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1669817048",
+      "name": "海へ",
+      "category": "food",
+      "lat": 43.0662208,
+      "lon": 141.348192,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1670384191",
+      "name": "らーめん おっぺしゃん",
+      "category": "food",
+      "lat": 43.0798417,
+      "lon": 141.3616224,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1678311464",
+      "name": "麻生球場",
+      "category": "landmark",
+      "lat": 43.1137036,
+      "lon": 141.3415227,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1687929745",
+      "name": "札幌市白石温水プール",
+      "category": "landmark",
+      "lat": 43.0545772,
+      "lon": 141.4059216,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1695441365",
+      "name": "とんかつ玉藤",
+      "category": "food",
+      "lat": 42.9785185,
+      "lon": 141.4688224,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1753356352",
+      "name": "札幌 東急REIホテル",
+      "category": "landmark",
+      "lat": 43.0549786,
+      "lon": 141.351061,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1768341570",
+      "name": "真駒内セキスイハイムアイスアリーナ",
+      "category": "landmark",
+      "lat": 42.9993975,
+      "lon": 141.3473833,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1768341623",
+      "name": "真駒内セキスイハイムスタジアム",
+      "category": "landmark",
+      "lat": 42.9962785,
+      "lon": 141.3430221,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1768673322",
+      "name": "札幌市南区体育館",
+      "category": "landmark",
+      "lat": 42.9952465,
+      "lon": 141.3333555,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1784718847",
+      "name": "札幌市水道記念館",
+      "category": "museum",
+      "lat": 43.0330672,
+      "lon": 141.3286403,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_1794115506",
+      "name": "宮丘公園",
+      "category": "park",
+      "lat": 43.0828003,
+      "lon": 141.2644242,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_250668618",
+      "name": "アーティゾン美術館",
+      "category": "museum",
+      "lat": 35.678749,
+      "lon": 139.7721285,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_250668627",
+      "name": "東京都写真美術館",
+      "category": "museum",
+      "lat": 35.641543,
+      "lon": 139.7133962,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_251055430",
+      "name": "Japan Traditional Crafts Centre",
+      "category": "museum",
+      "lat": 35.7288374,
+      "lon": 139.7093019,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_251055433",
+      "name": "Ntl Park Nature Study",
+      "category": "park",
+      "lat": 35.6397288,
+      "lon": 139.7177804,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_251055436",
+      "name": "Hotel APA",
+      "category": "landmark",
+      "lat": 35.7446452,
+      "lon": 139.7193141,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_251055437",
+      "name": "Hotel Sumisho",
+      "category": "landmark",
+      "lat": 35.6855571,
+      "lon": 139.7792233,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_252675438",
+      "name": "観世能楽堂",
+      "category": "landmark",
+      "lat": 35.6620432,
+      "lon": 139.6935718,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_259964052",
+      "name": "スターバックス",
+      "category": "food",
+      "lat": 35.684236,
+      "lon": 139.7390476,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_260158760",
+      "name": "蔵前水の館",
+      "category": "landmark",
+      "lat": 35.7016508,
+      "lon": 139.7913627,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_260207768",
+      "name": "下山国鉄総裁追憶碑",
+      "category": "landmark",
+      "lat": 35.7609876,
+      "lon": 139.8155179,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_260906693",
+      "name": "デニーズ",
+      "category": "food",
+      "lat": 35.6613882,
+      "lon": 139.7761893,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_265050644",
+      "name": "東海道品川宿まち歩きマップ",
+      "category": "landmark",
+      "lat": 35.6240194,
+      "lon": 139.739123,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_265050657",
+      "name": "けいすけラーメン",
+      "category": "food",
+      "lat": 35.6269249,
+      "lon": 139.7379208,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_265050658",
+      "name": "つばめグリル",
+      "category": "food",
+      "lat": 35.6276453,
+      "lon": 139.7373857,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_275605844",
+      "name": "珈琲館",
+      "category": "food",
+      "lat": 35.7482853,
+      "lon": 139.7196284,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_277836382",
+      "name": "スターバックス",
+      "category": "food",
+      "lat": 35.7018499,
+      "lon": 139.7424458,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_278227262",
+      "name": "餃子の王将",
+      "category": "food",
+      "lat": 35.5842486,
+      "lon": 139.4813675,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_295394438",
+      "name": "ドトールコーヒーショップ",
+      "category": "food",
+      "lat": 35.6812934,
+      "lon": 139.6981229,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297045188",
+      "name": "デニーズ",
+      "category": "food",
+      "lat": 35.5411021,
+      "lon": 139.6398527,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297045189",
+      "name": "じゅうじゅうカルビ",
+      "category": "food",
+      "lat": 35.5410204,
+      "lon": 139.6392856,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297161665",
+      "name": "ラ・オハナ",
+      "category": "food",
+      "lat": 35.5130813,
+      "lon": 139.6222668,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297164363",
+      "name": "横濱家",
+      "category": "food",
+      "lat": 35.5248585,
+      "lon": 139.644055,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297164401",
+      "name": "華屋与兵衛",
+      "category": "food",
+      "lat": 35.5250824,
+      "lon": 139.6559194,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297253620",
+      "name": "ジョナサン",
+      "category": "food",
+      "lat": 35.6331156,
+      "lon": 139.5801065,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297271602",
+      "name": "デニーズ",
+      "category": "food",
+      "lat": 35.6228046,
+      "lon": 139.6089358,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297271717",
+      "name": "ビッグボーイ",
+      "category": "food",
+      "lat": 35.6184016,
+      "lon": 139.6190603,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297271957",
+      "name": "デニーズ",
+      "category": "food",
+      "lat": 35.6022198,
+      "lon": 139.6190263,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_297275264",
+      "name": "ロイヤルホスト尾山台店",
+      "category": "food",
+      "lat": 35.6021414,
+      "lon": 139.656272,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_298428710",
+      "name": "鯉寿司",
+      "category": "food",
+      "lat": 35.6498651,
+      "lon": 139.5654685,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_301584380",
+      "name": "ホテルマイステイズ",
+      "category": "landmark",
+      "lat": 35.7125281,
+      "lon": 139.7820268,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_302017808",
+      "name": "カレーうどん千吉",
+      "category": "food",
+      "lat": 35.5613953,
+      "lon": 139.722916,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_302022636",
+      "name": "新島のモヤイ像",
+      "category": "landmark",
+      "lat": 35.5623746,
+      "lon": 139.7169699,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_302164577",
+      "name": "ガスト",
+      "category": "food",
+      "lat": 35.5694106,
+      "lon": 139.7310921,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_303781761",
+      "name": "びっくりドンキー",
+      "category": "food",
+      "lat": 35.6767582,
+      "lon": 139.4522024,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_303781764",
+      "name": "ガスト",
+      "category": "food",
+      "lat": 35.6768493,
+      "lon": 139.4511365,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_304417962",
+      "name": "勝海舟夫妻墓所",
+      "category": "landmark",
+      "lat": 35.6024159,
+      "lon": 139.6922017,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_304805567",
+      "name": "粥 「喜喜」",
+      "category": "food",
+      "lat": 35.6726359,
+      "lon": 139.7123917,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_304805570",
+      "name": "自家焙煎珈琲豆 「ルンバミーア」",
+      "category": "food",
+      "lat": 35.6749577,
+      "lon": 139.7124612,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_304805573",
+      "name": "ヘンドリックス・カリー・バー",
+      "category": "food",
+      "lat": 35.6748355,
+      "lon": 139.7124552,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_343379817",
+      "name": "ラーメン山岡家",
+      "category": "food",
+      "lat": 43.0915666,
+      "lon": 141.41863,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_352943820",
+      "name": "プレイマウンテン",
+      "category": "landmark",
+      "lat": 43.1266747,
+      "lon": 141.427516,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_422442790",
+      "name": "コナミスポーツクラブ",
+      "category": "landmark",
+      "lat": 43.0661286,
+      "lon": 141.3470102,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_422442792",
+      "name": "辛いラーメン14",
+      "category": "food",
+      "lat": 43.0655342,
+      "lon": 141.3474197,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_465307696",
+      "name": "東横INN 札幌駅南口",
+      "category": "landmark",
+      "lat": 43.0655188,
+      "lon": 141.354663,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_465483323",
+      "name": "かに本家",
+      "category": "food",
+      "lat": 43.0656651,
+      "lon": 141.3525675,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_477366417",
+      "name": "海の家 えびすや",
+      "category": "food",
+      "lat": 33.6625796,
+      "lon": 130.3151814,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989498",
+      "name": "Volks",
+      "category": "food",
+      "lat": 33.5808008,
+      "lon": 130.4231262,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989500",
+      "name": "肉ちゃんうどん博多駅南店",
+      "category": "food",
+      "lat": 33.5846384,
+      "lon": 130.4221885,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989501",
+      "name": "お好み焼き",
+      "category": "food",
+      "lat": 33.5816881,
+      "lon": 130.4255312,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989502",
+      "name": "キッチンハウスEIJIYA",
+      "category": "food",
+      "lat": 33.5819417,
+      "lon": 130.4256601,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989505",
+      "name": "木曽路",
+      "category": "food",
+      "lat": 33.5840212,
+      "lon": 130.4261692,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989506",
+      "name": "中華料理 厨禾",
+      "category": "food",
+      "lat": 33.5837955,
+      "lon": 130.4255308,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_495989510",
+      "name": "焼き鳥　大政",
+      "category": "food",
+      "lat": 33.5817103,
+      "lon": 130.4238751,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_501782671",
+      "name": "焼肉 多牛",
+      "category": "food",
+      "lat": 33.585686,
+      "lon": 130.4238087,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_506232954",
+      "name": "重慶",
+      "category": "food",
+      "lat": 33.5805927,
+      "lon": 130.4229935,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_506232962",
+      "name": "うどん",
+      "category": "food",
+      "lat": 33.5855473,
+      "lon": 130.4243324,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_559389812",
+      "name": "焼肉 ハチハチ",
+      "category": "food",
+      "lat": 33.5859777,
+      "lon": 130.4276522,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_582785792",
+      "name": "THE BASICS FUKUOKA",
+      "category": "landmark",
+      "lat": 33.5889609,
+      "lon": 130.4267209,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_598510950",
+      "name": "魚市場",
+      "category": "landmark",
+      "lat": 33.5892017,
+      "lon": 130.4095839,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_598512769",
+      "name": "博多港開港六十周年記念塔",
+      "category": "landmark",
+      "lat": 33.6051728,
+      "lon": 130.3965461,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_692545062",
+      "name": "Pepper Lunch 福岡春日店",
+      "category": "food",
+      "lat": 33.5339245,
+      "lon": 130.4581475,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_694178451",
+      "name": "ウエスト　うどん",
+      "category": "food",
+      "lat": 33.5398911,
+      "lon": 130.4277102,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_694218740",
+      "name": "韓国炭火焼肉 牛'Z",
+      "category": "food",
+      "lat": 33.5400073,
+      "lon": 130.4274362,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_707155538",
+      "name": "福満亭",
+      "category": "food",
+      "lat": 33.539369,
+      "lon": 130.4273324,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_707155539",
+      "name": "鮫島",
+      "category": "food",
+      "lat": 33.5392713,
+      "lon": 130.4273324,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_720631932",
+      "name": "ABURAYAMA FUKUOKA",
+      "category": "park",
+      "lat": 33.509116,
+      "lon": 130.3772986,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_764392330",
+      "name": "デルソル",
+      "category": "landmark",
+      "lat": 33.5178211,
+      "lon": 130.4537908,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_764392331",
+      "name": "heisei",
+      "category": "landmark",
+      "lat": 33.5173023,
+      "lon": 130.4537049,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_765589832",
+      "name": "ジョイフル",
+      "category": "food",
+      "lat": 33.515744,
+      "lon": 130.4322355,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_775442521",
+      "name": "ガスト",
+      "category": "food",
+      "lat": 43.1212276,
+      "lon": 141.3543496,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_777609440",
+      "name": "すし大臣",
+      "category": "food",
+      "lat": 33.560007,
+      "lon": 130.4483584,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_791502435",
+      "name": "八仙閣（中華）",
+      "category": "food",
+      "lat": 33.5866905,
+      "lon": 130.4240548,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_791502463",
+      "name": "北の恵み・ラーメン",
+      "category": "food",
+      "lat": 33.6002894,
+      "lon": 130.4373097,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_791502470",
+      "name": "ガスト筑紫通弓田店",
+      "category": "food",
+      "lat": 33.5644687,
+      "lon": 130.4435062,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792619975",
+      "name": "焼肉龍王館",
+      "category": "food",
+      "lat": 33.516837,
+      "lon": 130.4399456,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896152",
+      "name": "ホテルセントラーザ博多",
+      "category": "landmark",
+      "lat": 33.5906166,
+      "lon": 130.4219642,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896162",
+      "name": "博多グリーンホテル 一号館",
+      "category": "landmark",
+      "lat": 33.5918131,
+      "lon": 130.4221291,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896181",
+      "name": "ホテルサンルート博多",
+      "category": "landmark",
+      "lat": 33.591196,
+      "lon": 130.4222142,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896219",
+      "name": "ホテルレオパレス",
+      "category": "landmark",
+      "lat": 33.5882176,
+      "lon": 130.4225705,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896225",
+      "name": "サンライフホテル２・３",
+      "category": "landmark",
+      "lat": 33.5901919,
+      "lon": 130.4227623,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896230",
+      "name": "都ホテル博多",
+      "category": "landmark",
+      "lat": 33.5896582,
+      "lon": 130.4227959,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896242",
+      "name": "ホテルクリオコート博多",
+      "category": "landmark",
+      "lat": 33.5896825,
+      "lon": 130.4219365,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896291",
+      "name": "東横イン",
+      "category": "landmark",
+      "lat": 33.5817841,
+      "lon": 130.4222245,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_792896299",
+      "name": "リッチモンドホテル",
+      "category": "landmark",
+      "lat": 33.5881081,
+      "lon": 130.422072,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_794322494",
+      "name": "札幌市資料館",
+      "category": "museum",
+      "lat": 43.0585319,
+      "lon": 141.3374679,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_794415286",
+      "name": "渡辺淳一文学館",
+      "category": "museum",
+      "lat": 43.0444572,
+      "lon": 141.3512683,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "osm_node_794417287",
+      "name": "札幌パークホテル",
+      "category": "landmark",
+      "lat": 43.0476141,
+      "lon": 141.3560695,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "shibuya_parco_35.662_139.699",
+      "name": "Shibuya PARCO",
+      "category": "shopping",
+      "lat": 35.662,
+      "lon": 139.6987,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "shinjuku_prince_hotel_35.694_139.701",
+      "name": "Shinjuku Prince Hotel",
+      "category": "station",
+      "lat": 35.694,
+      "lon": 139.7007,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "sunshine_city_35.729_139.718",
+      "name": "Sunshine City",
+      "category": "shopping",
+      "lat": 35.7291,
+      "lon": 139.718,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "tokyo_character_street_35.681_139.767",
+      "name": "Tokyo Character Street",
+      "category": "shopping",
+      "lat": 35.6812,
+      "lon": 139.7671,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "tokyo_disneyland_35.633_139.88",
+      "name": "Tokyo Disneyland",
+      "category": "theme_park",
+      "lat": 35.6329,
+      "lon": 139.8804,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "tokyo_disneysea_35.627_139.885",
+      "name": "Tokyo DisneySea",
+      "category": "theme_park",
+      "lat": 35.6267,
+      "lon": 139.8851,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "yokohama_anpanman_children_s_museum_35.462_139.625",
+      "name": "Yokohama Anpanman Children's Museum",
+      "category": "kid_museum",
+      "lat": 35.4615,
+      "lon": 139.6255,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "기치조지_35.703_139.58",
+      "name": "기치조지",
+      "category": "park",
+      "lat": 35.7031,
+      "lon": 139.5797,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "긴자_35.672_139.765",
+      "name": "긴자",
+      "category": "food",
+      "lat": 35.6717,
+      "lon": 139.765,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "나카메구로_35.644_139.699",
+      "name": "나카메구로",
+      "category": "food",
+      "lat": 35.6441,
+      "lon": 139.6992,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "도요스_시장_35.643_139.781",
+      "name": "도요스 시장",
+      "category": "food",
+      "lat": 35.6431,
+      "lon": 139.781,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "도쿄역_마루노우치_35.681_139.767",
+      "name": "도쿄역 마루노우치",
+      "category": "park",
+      "lat": 35.6812,
+      "lon": 139.7671,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "도쿄타워_35.659_139.745",
+      "name": "도쿄타워",
+      "category": "landmark",
+      "lat": 35.6586,
+      "lon": 139.7454,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "롯폰기_힐즈_35.66_139.729",
+      "name": "롯폰기 힐즈",
+      "category": "place",
+      "lat": 35.6605,
+      "lon": 139.7292,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "메이지_신궁_35.676_139.699",
+      "name": "메이지 신궁",
+      "category": "place",
+      "lat": 35.6764,
+      "lon": 139.6993,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "시부야_스크램블_교차로_35.66_139.701",
+      "name": "시부야 스크램블 교차로",
+      "category": "place",
+      "lat": 35.6595,
+      "lon": 139.7005,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "신주쿠_교엔_35.685_139.71",
+      "name": "신주쿠 교엔",
+      "category": "park",
+      "lat": 35.6852,
+      "lon": 139.71,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "신주쿠역_인근_호텔_35.691_139.7",
+      "name": "신주쿠역 인근 호텔",
+      "category": "station",
+      "lat": 35.6909,
+      "lon": 139.7003,
+      "popularity": 1.0,
+      "coord_known": 1
+    },
+    {
+      "id": "아사쿠사_센소지_35.715_139.797",
+      "name": "아사쿠사 센소지",
+      "category": "park",
+      "lat": 35.7148,
+      "lon": 139.7967,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "아키하바라_35.698_139.773",
+      "name": "아키하바라",
+      "category": "shopping",
+      "lat": 35.6984,
+      "lon": 139.773,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "에비스_35.647_139.71",
+      "name": "에비스",
+      "category": "place",
+      "lat": 35.6467,
+      "lon": 139.7101,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "오다이바_35.626_139.776",
+      "name": "오다이바",
+      "category": "park",
+      "lat": 35.6256,
+      "lon": 139.7757,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "오모이데요코초_35.694_139.699",
+      "name": "오모이데요코초",
+      "category": "place",
+      "lat": 35.6938,
+      "lon": 139.6994,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "오모테산도_35.665_139.712",
+      "name": "오모테산도",
+      "category": "food",
+      "lat": 35.6652,
+      "lon": 139.7123,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "우에노_아메요코_35.708_139.774",
+      "name": "우에노 아메요코",
+      "category": "place",
+      "lat": 35.7076,
+      "lon": 139.7745,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "이노카시라_공원_35.7_139.577",
+      "name": "이노카시라 공원",
+      "category": "park",
+      "lat": 35.7003,
+      "lon": 139.5765,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "츠키지_장외시장_35.666_139.771",
+      "name": "츠키지 장외시장",
+      "category": "place",
+      "lat": 35.6655,
+      "lon": 139.7707,
+      "popularity": 0.125,
+      "coord_known": 1
+    },
+    {
+      "id": "하네다_공항_35.549_139.78",
+      "name": "하네다 공항",
+      "category": "station",
+      "lat": 35.5494,
+      "lon": 139.7798,
+      "popularity": 0.25,
+      "coord_known": 1
+    },
+    {
+      "id": "하라주쿠_다케시타도리_35.672_139.703",
+      "name": "하라주쿠 다케시타도리",
+      "category": "shopping",
+      "lat": 35.6717,
+      "lon": 139.703,
+      "popularity": 0.125,
+      "coord_known": 1
+    }
+  ]
+}

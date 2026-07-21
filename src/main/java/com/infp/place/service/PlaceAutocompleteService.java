@@ -20,12 +20,15 @@ import java.util.*;
 public class PlaceAutocompleteService {
 
     private static final Duration RESOLVED_CACHE_TTL = Duration.ofDays(7);
+    private static final String CACHE_VERSION = "v5";
     // 좌표 정규화 로그 테스트
     private static final Logger log = LoggerFactory.getLogger(PlaceAutocompleteService.class);
     private static final Duration CACHE_TTL = Duration.ofHours(6);
     private static final TypeReference<List<PlaceItem>> PLACE_LIST_TYPE = new TypeReference<>() {};
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final StringRedisTemplate redisTemplate;
+    private final PlaceMemoryService placeMemoryService;
+    private final PlaceRankingModel rankingModel;
 
     /**
      * Nominatim 외부 호출 전담 클라이언트
@@ -35,10 +38,14 @@ public class PlaceAutocompleteService {
 
     public PlaceAutocompleteService(
             NominatimClient nominatimClient,
-            StringRedisTemplate redisTemplate
+            StringRedisTemplate redisTemplate,
+            PlaceMemoryService placeMemoryService,
+            PlaceRankingModel rankingModel
     ) {
         this.nominatimClient = nominatimClient;
         this.redisTemplate = redisTemplate;
+        this.placeMemoryService = placeMemoryService;
+        this.rankingModel = rankingModel;
     }
 
     /**
@@ -56,6 +63,10 @@ public class PlaceAutocompleteService {
 
 
     public Mono<List<PlaceItem>> autocomplete(String q) {
+        return autocomplete(q, "KR");
+    }
+
+    public Mono<List<PlaceItem>> autocomplete(String q, String countryCode) {
 
         // 🔹 1) null 방지 + trim 처리
         String s = q == null ? "" : q.trim();
@@ -65,14 +76,21 @@ public class PlaceAutocompleteService {
             return Mono.just(List.of());
         }
 
-        PlaceItem resolved = readResolvedCache(s);
-        if (resolved != null) {
-            return Mono.just(List.of(resolved));
+        List<PlaceItem> memoryItems = placeMemoryService.search(s, 20);
+        if (memoryItems.size() >= 10) {
+            return Mono.just(memoryItems);
         }
 
-        List<PlaceItem> cached = readCache(s);
+        String country = normalizeCountry(countryCode);
+
+        PlaceItem resolved = readResolvedCache(s, country);
+        if (resolved != null) {
+            return Mono.just(mergeAndRank(s, memoryItems, List.of(resolved), 20));
+        }
+
+        List<PlaceItem> cached = readCache(s, country);
         if (cached != null) {
-            return Mono.just(cached);
+            return Mono.just(mergeAndRank(s, memoryItems, cached, 20));
         }
 
         // 🔹 2) 후보 생성 (최대 5개)
@@ -96,7 +114,7 @@ public class PlaceAutocompleteService {
 
                 // 후보마다 Nominatim 호출 (비동기 병렬 실행)
                 .flatMap(v ->
-                        nominatimClient.search(v)
+                        nominatimClient.search(v, country)
                                 // JSON 응답을 우리 DTO로 매핑
                                 .map(list -> mapToPlaceItems(list, v))
                 )
@@ -137,69 +155,99 @@ public class PlaceAutocompleteService {
                     }
 
                     // 🔹 상위 15개 제한
-                    return out.size() > 15
-                            ? out.subList(0, 15)
-                            : out;
+                    return mergeAndRank(s, memoryItems, out, 20);
                 })
                 .doOnNext(result -> {
-                    writeCache(s, result);
-                    writeResolvedCaches(s, result);
+                    writeCache(s, country, result);
+                    writeResolvedCaches(s, country, result);
                 });
     }
 
-    private List<PlaceItem> readCache(String query) {
+    private List<PlaceItem> mergeAndRank(String query, List<PlaceItem> first, List<PlaceItem> second, int limit) {
+        LinkedHashMap<String, PlaceItem> merged = new LinkedHashMap<>();
+        for (PlaceItem item : first) {
+            merged.putIfAbsent(placeMergeKey(item), item);
+        }
+        for (PlaceItem item : second) {
+            merged.putIfAbsent(placeMergeKey(item), item);
+        }
+        List<PlaceItem> ranked = new ArrayList<>(merged.values());
+        ranked.sort(Comparator
+                .comparingDouble((PlaceItem item) -> rankingModel.score(query, item))
+                .reversed()
+                .thenComparing(PlaceItem::title, Comparator.nullsLast(String::compareToIgnoreCase)));
+        return ranked.size() > limit ? ranked.subList(0, limit) : ranked;
+    }
+
+    private String placeMergeKey(PlaceItem item) {
+        String title = normalizedKey(item.displayTitle() == null || item.displayTitle().isBlank() ? item.title() : item.displayTitle());
+        double lat = Math.round(item.lat() * 10_000.0) / 10_000.0;
+        double lon = Math.round(item.lon() * 10_000.0) / 10_000.0;
+        return title + ":" + lat + ":" + lon;
+    }
+
+    private List<PlaceItem> readCache(String query, String countryCode) {
         try {
-            String cached = redisTemplate.opsForValue().get(cacheKey(query));
+            String cached = redisTemplate.opsForValue().get(cacheKey(query, countryCode));
             return cached == null ? null : objectMapper.readValue(cached, PLACE_LIST_TYPE);
         } catch (Exception ignored) {
             return null;
         }
     }
 
-    private void writeCache(String query, List<PlaceItem> result) {
+    private void writeCache(String query, String countryCode, List<PlaceItem> result) {
         try {
-            redisTemplate.opsForValue().set(cacheKey(query), objectMapper.writeValueAsString(result), CACHE_TTL);
+            redisTemplate.opsForValue().set(cacheKey(query, countryCode), objectMapper.writeValueAsString(result), CACHE_TTL);
         } catch (Exception ignored) {
             // Autocomplete should remain available even when Redis is unavailable.
         }
     }
 
-    private String cacheKey(String query) {
-        return "place:autocomplete:v1:" + Integer.toHexString(normalizedKey(query).hashCode());
+    private String cacheKey(String query, String countryCode) {
+        return "place:autocomplete:" + CACHE_VERSION + ":" + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
     }
 
-    private PlaceItem readResolvedCache(String query) {
+    private PlaceItem readResolvedCache(String query, String countryCode) {
         try {
-            String cached = redisTemplate.opsForValue().get(resolvedCacheKey(query));
+            String cached = redisTemplate.opsForValue().get(resolvedCacheKey(query, countryCode));
             return cached == null ? null : objectMapper.readValue(cached, PlaceItem.class);
         } catch (Exception ignored) {
             return null;
         }
     }
 
-    private void writeResolvedCaches(String query, List<PlaceItem> result) {
+    private void writeResolvedCaches(String query, String countryCode, List<PlaceItem> result) {
         if (result == null || result.isEmpty()) return;
         for (PlaceItem item : result) {
-            writeResolvedCache(query, item);
-            writeResolvedCache(item.title(), item);
-            writeResolvedCache(item.displayTitle(), item);
-            writeResolvedCache(item.titleKo(), item);
-            writeResolvedCache(item.titleEn(), item);
-            writeResolvedCache(item.titleJa(), item);
+            writeResolvedCache(query, countryCode, item);
+            writeResolvedCache(item.title(), countryCode, item);
+            writeResolvedCache(item.displayTitle(), countryCode, item);
+            writeResolvedCache(item.titleKo(), countryCode, item);
+            writeResolvedCache(item.titleEn(), countryCode, item);
+            writeResolvedCache(item.titleJa(), countryCode, item);
         }
     }
 
-    private void writeResolvedCache(String alias, PlaceItem item) {
+    private void writeResolvedCache(String alias, String countryCode, PlaceItem item) {
         if (alias == null || alias.isBlank() || item == null) return;
         try {
-            redisTemplate.opsForValue().set(resolvedCacheKey(alias), objectMapper.writeValueAsString(item), RESOLVED_CACHE_TTL);
+            redisTemplate.opsForValue().set(resolvedCacheKey(alias, countryCode), objectMapper.writeValueAsString(item), RESOLVED_CACHE_TTL);
         } catch (Exception ignored) {
             // Resolved-place cache is only an optimization.
         }
     }
 
-    private String resolvedCacheKey(String query) {
-        return "place:resolved:v1:" + Integer.toHexString(normalizedKey(query).hashCode());
+    private String resolvedCacheKey(String query, String countryCode) {
+        return "place:resolved:" + CACHE_VERSION + ":" + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
+    }
+
+    private String normalizeCountry(String countryCode) {
+        if (countryCode == null) return "KR";
+        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
+            case "JP", "JPN", "JA" -> "JP";
+            case "KR", "KOR", "KO" -> "KR";
+            default -> "KR";
+        };
     }
 
     private String normalizedKey(String query) {

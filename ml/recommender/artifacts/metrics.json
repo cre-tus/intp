@@ -1,0 +1,9 @@
+{
+  "rows": 1572,
+  "places": 151,
+  "valid_loss": 0.24374017138329762,
+  "valid_accuracy": 0.7174603174603175,
+  "best_epoch": 14,
+  "device": "cuda",
+  "cuda_name": "NVIDIA GeForce RTX 4070 Ti SUPER"
+}

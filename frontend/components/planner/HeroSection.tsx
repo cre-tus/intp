@@ -8,7 +8,7 @@ import TravelItinerary, { ItineraryDay, SelectedCostCell } from "@/components/pl
 import ParticipantsSidebar, { Participant } from "@/components/planner/ParticipantsSidebar";
 import MapRoutePanel from "@/components/planner/MapRoutePanel";
 import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
-import { Calculator, CalendarDays, Route, X } from "lucide-react";
+import { Calculator, CalendarDays, Redo2, Route, Undo2, X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import {
     createEmptyTravelPlan,
@@ -17,6 +17,7 @@ import {
     saveTravelPlan,
     travelPlanNodeLimit,
     type TravelPlanDraft,
+    type TravelCountryCode,
 } from "@/lib/travelPlans";
 import { createClientId } from "@/lib/ids";
 import { mergeTravelPlans, travelPlansEqual } from "@/lib/travelPlanCrdt";
@@ -44,7 +45,16 @@ type ActiveEditor = {
     color: string;
 };
 
+type HistoryEntry =
+    | { kind: "days"; value: ItineraryDay[] }
+    | { kind: "checklist"; value: ChecklistItem[] };
+
 const TEAM_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#f97316", "#14b8a6", "#f59e0b", "#06b6d4"];
+const HISTORY_LIMIT = 80;
+
+function appendHistoryEntry(history: HistoryEntry[], entry: HistoryEntry) {
+    return [...history, entry].slice(-HISTORY_LIMIT);
+}
 
 export default function HeroSection({ createId, allowCreate = false }: { createId?: string; allowCreate?: boolean }) {
     const { me, isLoggedIn, fetchMe } = useAuthStore();
@@ -60,6 +70,8 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const skipNextDirtyMarkRef = useRef(false);
     const realtimeSyncTimerRef = useRef<number | null>(null);
     const remotePersistTimerRef = useRef<number | null>(null);
+    const undoStackRef = useRef<HistoryEntry[]>([]);
+    const redoStackRef = useRef<HistoryEntry[]>([]);
     const editorRef = useRef({ name: "사용자", email: "" });
     const [syncStatus, setSyncStatus] = useState("오프라인 저장");
     const [initialPlan, setInitialPlan] = useState<TravelPlanDraft>(() => createEmptyTravelPlan(planId));
@@ -77,7 +89,21 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const [lastEditorEmail, setLastEditorEmail] = useState("");
     const [missingPlan, setMissingPlan] = useState(false);
     const [activeEditorsByTarget, setActiveEditorsByTarget] = useState<Record<string, ActiveEditor>>({});
+    const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
     const loginAlertOpenRef = useRef(false);
+
+    const refreshHistoryState = useCallback(() => {
+        setHistoryState({
+            canUndo: undoStackRef.current.length > 0,
+            canRedo: redoStackRef.current.length > 0,
+        });
+    }, []);
+
+    const resetDaysHistory = useCallback(() => {
+        undoStackRef.current = [];
+        redoStackRef.current = [];
+        refreshHistoryState();
+    }, [refreshHistoryState]);
 
     useEffect(() => {
         void fetchMe();
@@ -104,6 +130,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                 setChecklist(next.checklist);
                 setParticipants(next.participants);
                 setDays(next.days);
+                resetDaysHistory();
                 setRouteDayId(next.days[0]?.id ?? "");
                 setLastSavedAt(next.updatedAt);
                 dirtyRef.current = !loaded;
@@ -115,7 +142,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         return () => {
             cancelled = true;
         };
-    }, [allowCreate, planId]);
+    }, [allowCreate, planId, resetDaysHistory]);
 
     const currentEditorName = me?.nickname || me?.email?.split("@")[0] || "사용자";
     const currentEditorEmail = me?.email ?? "";
@@ -176,12 +203,13 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         title,
         template: initialPlan.template ?? "basic",
         tier: initialPlan.tier ?? "FREE",
+        tripContext: initialPlan.tripContext,
         checklist,
         participants,
         days,
         createdAt: initialPlan.createdAt,
         updatedAt: new Date().toISOString(),
-    }), [checklist, days, initialPlan.createdAt, initialPlan.template, initialPlan.tier, participants, planId, title]);
+    }), [checklist, days, initialPlan.createdAt, initialPlan.template, initialPlan.tier, initialPlan.tripContext, participants, planId, title]);
 
     useEffect(() => {
         draftRef.current = draft;
@@ -268,6 +296,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                     setChecklist(mergedPlan.checklist);
                     setParticipants(mergedPlan.participants);
                     setDays(mergedPlan.days);
+                    resetDaysHistory();
                     draftRef.current = mergedPlan;
                     mergeBaseRef.current = mergedPlan;
                     setInitialPlan(mergedPlan);
@@ -316,7 +345,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             closedByCleanup = true;
             socketRef.current?.close();
         };
-    }, [planId]);
+    }, [planId, resetDaysHistory]);
 
     const saveCurrentPlan = useCallback(async (broadcast = true, planOverride?: TravelPlanDraft) => {
         const source = planOverride ?? draftRef.current ?? draft;
@@ -475,21 +504,67 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
 
     const setChecklistSynced = useCallback((nextChecklist: SetStateAction<ChecklistItem[]>) => {
         const currentDraft = draftRef.current ?? draft;
+        const previousChecklist = currentDraft.checklist;
         const checklistValue = typeof nextChecklist === "function"
-            ? (nextChecklist as (prev: ChecklistItem[]) => ChecklistItem[])(currentDraft.checklist)
+            ? (nextChecklist as (prev: ChecklistItem[]) => ChecklistItem[])(previousChecklist)
             : nextChecklist;
+        if (checklistEqual(previousChecklist, checklistValue)) return;
+        undoStackRef.current = appendHistoryEntry(undoStackRef.current, { kind: "checklist", value: cloneChecklist(previousChecklist) });
+        redoStackRef.current = [];
+        refreshHistoryState();
         setChecklist(checklistValue);
         applyDraftPatch({ checklist: checklistValue });
-    }, [applyDraftPatch, draft]);
+    }, [applyDraftPatch, draft, refreshHistoryState]);
 
     const setDaysSynced = useCallback((nextDays: SetStateAction<ItineraryDay[]>) => {
         const currentDraft = draftRef.current ?? draft;
+        const previousDays = currentDraft.days;
         const daysValue = typeof nextDays === "function"
-            ? (nextDays as (prev: ItineraryDay[]) => ItineraryDay[])(currentDraft.days)
+            ? (nextDays as (prev: ItineraryDay[]) => ItineraryDay[])(previousDays)
             : nextDays;
+        if (daysEqual(previousDays, daysValue)) return;
+        undoStackRef.current = appendHistoryEntry(undoStackRef.current, { kind: "days", value: cloneDays(previousDays) });
+        redoStackRef.current = [];
+        refreshHistoryState();
         setDays(daysValue);
         applyDraftPatch({ days: daysValue });
-    }, [applyDraftPatch, draft]);
+    }, [applyDraftPatch, draft, refreshHistoryState]);
+
+    const undoLastChange = useCallback(() => {
+        const previous = undoStackRef.current.pop();
+        if (!previous) return;
+        const currentDraft = draftRef.current ?? draft;
+        if (previous.kind === "days") {
+            redoStackRef.current = appendHistoryEntry(redoStackRef.current, { kind: "days", value: cloneDays(currentDraft.days) });
+            const nextDays = cloneDays(previous.value);
+            setDays(nextDays);
+            applyDraftPatch({ days: nextDays });
+        } else {
+            redoStackRef.current = appendHistoryEntry(redoStackRef.current, { kind: "checklist", value: cloneChecklist(currentDraft.checklist) });
+            const nextChecklist = cloneChecklist(previous.value);
+            setChecklist(nextChecklist);
+            applyDraftPatch({ checklist: nextChecklist });
+        }
+        refreshHistoryState();
+    }, [applyDraftPatch, draft, refreshHistoryState]);
+
+    const redoLastChange = useCallback(() => {
+        const next = redoStackRef.current.pop();
+        if (!next) return;
+        const currentDraft = draftRef.current ?? draft;
+        if (next.kind === "days") {
+            undoStackRef.current = appendHistoryEntry(undoStackRef.current, { kind: "days", value: cloneDays(currentDraft.days) });
+            const nextDays = cloneDays(next.value);
+            setDays(nextDays);
+            applyDraftPatch({ days: nextDays });
+        } else {
+            undoStackRef.current = appendHistoryEntry(undoStackRef.current, { kind: "checklist", value: cloneChecklist(currentDraft.checklist) });
+            const nextChecklist = cloneChecklist(next.value);
+            setChecklist(nextChecklist);
+            applyDraftPatch({ checklist: nextChecklist });
+        }
+        refreshHistoryState();
+    }, [applyDraftPatch, draft, refreshHistoryState]);
 
     const setParticipantsSynced = useCallback((nextParticipants: SetStateAction<Participant[]>) => {
         const currentDraft = draftRef.current ?? draft;
@@ -498,6 +573,17 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
             : nextParticipants;
         setParticipants(participantsValue);
         applyDraftPatch({ participants: participantsValue });
+    }, [applyDraftPatch, draft]);
+
+    const setTravelCountrySynced = useCallback((nextCountryCode: TravelCountryCode) => {
+        const currentDraft = draftRef.current ?? draft;
+        if (currentDraft.tripContext.countryCode === nextCountryCode) return;
+        const nextTripContext = {
+            ...currentDraft.tripContext,
+            countryCode: nextCountryCode,
+        };
+        const nextDraft = applyDraftPatch({ tripContext: nextTripContext }, 0);
+        setInitialPlan(nextDraft);
     }, [applyDraftPatch, draft]);
 
     useEffect(() => {
@@ -704,6 +790,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                 template={draft.template}
                                 tier={draft.tier}
                                 planId={planId}
+                                countryCode={draft.tripContext.countryCode}
                                 currency={selectedCurrency}
                                 onCostSelectionChange={setSelectedCostCells}
                             />
@@ -732,9 +819,10 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                             onSave={() => saveCurrentPlan(true)}
                             onParticipantsSynced={syncAuthoritativeParticipants}
                             currentUserEmail={currentEditorEmail}
-                            currentUserName={currentEditorName}
                             selectedCurrency={selectedCurrency}
                             onCurrencyChange={setSelectedCurrency}
+                            countryCode={draft.tripContext.countryCode}
+                            onCountryCodeChange={setTravelCountrySynced}
                             routeCalculator={(
                                 <RouteCalculatorLauncher
                                     days={days}
@@ -745,6 +833,34 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                             )}
                         />
                     </div>
+                </div>
+            </div>
+
+            <div className="fixed bottom-5 left-1/2 z-[45] -translate-x-1/2 px-3">
+                <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-white/95 p-1 shadow-lg shadow-gray-300/40 backdrop-blur-md">
+                    <button
+                        type="button"
+                        onClick={undoLastChange}
+                        disabled={!historyState.canUndo}
+                        aria-label="일정 실행 취소"
+                        title="실행 취소"
+                        className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-xs font-black text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 sm:px-4 sm:text-sm"
+                    >
+                        <Undo2 className="h-4 w-4" />
+                        <span className="whitespace-nowrap">실행 취소</span>
+                    </button>
+                    <div className="h-6 w-px bg-gray-200" />
+                    <button
+                        type="button"
+                        onClick={redoLastChange}
+                        disabled={!historyState.canRedo}
+                        aria-label="일정 다시 실행"
+                        title="다시 실행"
+                        className="inline-flex h-10 items-center gap-1 rounded-full px-3 text-xs font-black text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-300 sm:px-4 sm:text-sm"
+                    >
+                        <Redo2 className="h-4 w-4" />
+                        <span className="whitespace-nowrap">다시 실행</span>
+                    </button>
                 </div>
             </div>
 
@@ -1014,6 +1130,22 @@ function realtimeUrls(planId: string) {
         urls.push(`${protocol}://${host}:8080/ws/plans/${encodedPlanId}`);
     }
     return Array.from(new Set(urls));
+}
+
+function cloneDays(days: ItineraryDay[]) {
+    return JSON.parse(JSON.stringify(days)) as ItineraryDay[];
+}
+
+function cloneChecklist(checklist: ChecklistItem[]) {
+    return JSON.parse(JSON.stringify(checklist)) as ChecklistItem[];
+}
+
+function daysEqual(left: ItineraryDay[], right: ItineraryDay[]) {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function checklistEqual(left: ChecklistItem[], right: ChecklistItem[]) {
+    return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function editorColor(value: string) {

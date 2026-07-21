@@ -68,6 +68,7 @@ export function createTokyoRecommendedPlan(
 ): TravelPlanDraft {
     const title = duration === "2n3d" ? "도쿄 2박 3일 일정" : "도쿄 4박 5일 일정";
     const plan = createEmptyTravelPlan(id, title, "basic", "FREE");
+    plan.tripContext.countryCode = "JP";
     const schedule = duration === "2n3d" ? TOKYO_2N3D : TOKYO_4N5D;
 
     plan.days = schedule.map((spots, index): ItineraryDay => ({

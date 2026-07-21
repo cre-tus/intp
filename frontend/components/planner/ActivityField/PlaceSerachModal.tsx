@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
-import PlaceSearchInput, { PlaceResult } from "./PlaceSerachInput"
+import PlaceSearchInput, { PlaceResult, type PlaceSearchOrigin } from "./PlaceSerachInput"
+import type { TravelCountryCode } from "@/lib/travelPlans";
 
 export default function PlaceSearchModal(props: {
     open: boolean;
@@ -11,6 +12,8 @@ export default function PlaceSearchModal(props: {
     onFixedOptionChange?: (checked: boolean) => void;
     paidPlaces?: boolean;
     planId?: string;
+    countryCode?: TravelCountryCode;
+    origin?: PlaceSearchOrigin | null;
 }) {
     if (!props.open) return null;
 
@@ -37,6 +40,8 @@ export default function PlaceSearchModal(props: {
                         onFixedOptionChange={props.onFixedOptionChange}
                         paidPlaces={props.paidPlaces}
                         planId={props.planId}
+                        countryCode={props.countryCode}
+                        origin={props.origin}
                         onSelect={(place) => {
                             props.onSelect(place);
                             props.onClose();

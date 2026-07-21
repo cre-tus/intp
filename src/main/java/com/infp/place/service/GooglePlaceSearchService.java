@@ -36,13 +36,18 @@ public class GooglePlaceSearchService {
     }
 
     public Mono<List<PlaceItem>> search(String query) {
+        return search(query, "KR");
+    }
+
+    public Mono<List<PlaceItem>> search(String query, String countryCode) {
         String normalized = normalize(query);
+        String region = normalizeRegion(countryCode);
         if (normalized.length() < 2) return Mono.just(List.of());
         if (apiKey.isBlank()) {
             return Mono.error(new IllegalStateException("Google 吏??API ?ㅺ? ?ㅼ젙?섏? ?딆븯?듬땲??"));
         }
 
-        String cacheKey = "place:google:text:v1:" + normalized;
+        String cacheKey = "place:google:text:v2:" + region + ":" + normalized;
         List<PlaceItem> cached = readCache(cacheKey);
         if (cached != null) return Mono.just(cached);
 
@@ -51,7 +56,7 @@ public class GooglePlaceSearchService {
                         .path("/maps/api/place/textsearch/json")
                         .queryParam("query", normalized)
                         .queryParam("language", "ko")
-                        .queryParam("region", "jp")
+                        .queryParam("region", region)
                         .queryParam("key", apiKey)
                         .build())
                 .retrieve()
@@ -152,5 +157,14 @@ public class GooglePlaceSearchService {
 
     private static String normalize(String value) {
         return value == null ? "" : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeRegion(String countryCode) {
+        if (countryCode == null) return "kr";
+        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
+            case "JP", "JPN", "JA" -> "jp";
+            case "KR", "KOR", "KO" -> "kr";
+            default -> "kr";
+        };
     }
 }

@@ -11,6 +11,8 @@ public record MeResponse(
         String role,
         String firstName,
         String lastName,
-        String birth
+        String birth,
+        String statusMessage,
+        String profileImageUrl
 ) {
 }

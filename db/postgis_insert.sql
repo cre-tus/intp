@@ -102,9 +102,10 @@ CREATE TEMP TABLE raw_stop_times (
 ) ON COMMIT DROP;
 
 CREATE TEMP TABLE raw_transfers (
-    from_trip_id text,
-    to_trip_id text,
-    transfer_type text
+    from_stop_id text,
+    to_stop_id text,
+    transfer_type text,
+    min_transfer_time text
 ) ON COMMIT DROP;
 
 CREATE TEMP TABLE raw_translations (
@@ -124,18 +125,18 @@ CREATE TEMP TABLE raw_shapes (
     shape_dist_traveled text
 ) ON COMMIT DROP;
 
-\copy raw_agency FROM '/gtfs/tokyo_rail/agency.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_attributions FROM '/gtfs/tokyo_rail/attributions.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_feed_info FROM '/gtfs/tokyo_rail/feed_info.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_stops FROM '/gtfs/tokyo_rail/stops.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_routes FROM '/gtfs/tokyo_rail/routes.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_calendar FROM '/gtfs/tokyo_rail/calendar.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_calendar_dates FROM '/gtfs/tokyo_rail/calendar_dates.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_trips FROM '/gtfs/tokyo_rail/trips.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_stop_times FROM '/gtfs/tokyo_rail/stop_times.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_transfers FROM '/gtfs/tokyo_rail/transfers.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_translations FROM '/gtfs/tokyo_rail/translations.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
-\copy raw_shapes FROM '/gtfs/tokyo_rail/shapes.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_agency FROM '/gtfs/active/agency.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_attributions FROM '/gtfs/active/attributions.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_feed_info FROM '/gtfs/active/feed_info.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_stops FROM '/gtfs/active/stops.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_routes FROM '/gtfs/active/routes.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_calendar FROM '/gtfs/active/calendar.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_calendar_dates FROM '/gtfs/active/calendar_dates.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_trips FROM '/gtfs/active/trips.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_stop_times FROM '/gtfs/active/stop_times.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_transfers FROM '/gtfs/active/transfers.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_translations FROM '/gtfs/active/translations.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
+\copy raw_shapes FROM '/gtfs/active/shapes.txt' WITH (FORMAT csv, HEADER true, NULL '', QUOTE '"')
 
 INSERT INTO gtfs.agency (
     agency_id, agency_name, agency_url, agency_timezone, agency_lang
@@ -303,13 +304,16 @@ SELECT
 FROM raw_stop_times;
 
 INSERT INTO gtfs.transfers (
-    from_trip_id, to_trip_id, transfer_type
+    from_stop_id, to_stop_id, transfer_type, min_transfer_time
 )
 SELECT
-    from_trip_id,
-    to_trip_id,
-    NULLIF(btrim(transfer_type), '')::integer
-FROM raw_transfers;
+    from_stop_id,
+    to_stop_id,
+    NULLIF(btrim(transfer_type), '')::integer,
+    NULLIF(btrim(min_transfer_time), '')::integer
+FROM raw_transfers
+WHERE from_stop_id IN (SELECT stop_id FROM gtfs.stops)
+  AND to_stop_id IN (SELECT stop_id FROM gtfs.stops);
 
 INSERT INTO gtfs.translations (
     table_name,

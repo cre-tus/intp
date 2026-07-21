@@ -3,6 +3,7 @@
 .idea
 build
 node_modules
+db/gtfs
 frontend/node_modules
 frontend/.next
 frontend/out

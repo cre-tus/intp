@@ -1,6 +1,7 @@
 import { Globe2, Search } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { loadGoogleMaps, type GoogleMap, type GoogleMarker } from "@/lib/googleMaps";
+import type { TravelCountryCode } from "@/lib/travelPlans";
 
 export type PlaceResult = {
     id: string;
@@ -27,7 +28,16 @@ type PlaceApiResult = {
 };
 
 type SearchProvider = "local" | "google";
+type SortMode = "relevance" | "distance";
 type LatLngTuple = [number, number];
+export type PlaceSearchOrigin = {
+    name?: string;
+    lat: number;
+    lon: number;
+};
+type RankedPlaceResult = PlaceResult & {
+    distanceFromOriginKm: number | null;
+};
 type LeafletMarker = {
     addTo(map: LeafletMap): LeafletMarker;
     setLatLng(latLng: LatLngTuple): LeafletMarker;
@@ -52,7 +62,10 @@ type LeafletApi = {
 const LEAFLET_CSS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 const LEAFLET_JS = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
 const TILE_URL = process.env.NEXT_PUBLIC_TILE_URL || "/tiles/{z}/{x}/{y}.png";
-const DEFAULT_CENTER: LatLngTuple = [35.6812, 139.7671];
+const COUNTRY_CENTERS: Record<TravelCountryCode, LatLngTuple> = {
+    KR: [37.5665, 126.9780],
+    JP: [35.6812, 139.7671],
+};
 
 function loadLeaflet(): Promise<LeafletApi> {
     if (typeof window === "undefined") return Promise.reject(new Error("Browser only"));
@@ -91,6 +104,8 @@ export default function PlaceSearchInput(props: {
     onFixedOptionChange?: (checked: boolean) => void;
     paidPlaces?: boolean;
     planId?: string;
+    countryCode?: TravelCountryCode;
+    origin?: PlaceSearchOrigin | null;
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -108,6 +123,9 @@ export default function PlaceSearchInput(props: {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [mapError, setMapError] = useState("");
+    const [sortMode, setSortMode] = useState<SortMode>("relevance");
+    const countryCode = props.countryCode ?? "KR";
+    const mapCenter = COUNTRY_CENTERS[countryCode] ?? COUNTRY_CENTERS.KR;
 
     const parsedLat = Number(manualLat);
     const parsedLon = Number(manualLon);
@@ -124,6 +142,11 @@ export default function PlaceSearchInput(props: {
     const googleEnabled = Boolean(props.paidPlaces && props.planId);
     const googleMapEnabled = Boolean(props.paidPlaces && props.planId);
     const canGoogleSearch = googleEnabled && normalizedQuery.length >= 2;
+    const rankedItems = useMemo(() => rankPlacesByOrigin(items, props.origin, sortMode), [items, props.origin, sortMode]);
+
+    useEffect(() => {
+        if (!props.origin && sortMode === "distance") setSortMode("relevance");
+    }, [props.origin, sortMode]);
 
     const runSearch = useCallback(async (nextProvider: SearchProvider = provider) => {
         const query = q.trim();
@@ -136,7 +159,7 @@ export default function PlaceSearchInput(props: {
             return;
         }
 
-        const cacheKey = `${nextProvider}:${query.toLowerCase()}`;
+        const cacheKey = `${nextProvider}:${countryCode}:${query.toLowerCase()}`;
         const cached = searchCacheRef.current.get(cacheKey);
         if (cached) {
             setItems(cached);
@@ -148,8 +171,8 @@ export default function PlaceSearchInput(props: {
         setError("");
         try {
             const url = nextProvider === "google"
-                ? `/api/place/google/search?planId=${encodeURIComponent(props.planId ?? "")}&q=${encodeURIComponent(query)}`
-                : `/api/place/autocomplete?q=${encodeURIComponent(query)}`;
+                ? `/api/place/google/search?planId=${encodeURIComponent(props.planId ?? "")}&countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`
+                : `/api/place/autocomplete?countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`;
             const res = await fetch(url);
             if (!res.ok) {
                 const message = await res.text();
@@ -164,7 +187,7 @@ export default function PlaceSearchInput(props: {
         } finally {
             setLoading(false);
         }
-    }, [googleEnabled, props.planId, provider, q]);
+    }, [countryCode, googleEnabled, props.planId, provider, q]);
 
     useEffect(() => {
         if (provider !== "local") return;
@@ -186,7 +209,7 @@ export default function PlaceSearchInput(props: {
                 .then((googleMaps) => {
                     if (!mounted || !mapElementRef.current || googleMapRef.current) return;
                     const map = new googleMaps.Map(mapElementRef.current, {
-                        center: { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] },
+                        center: { lat: mapCenter[0], lng: mapCenter[1] },
                         zoom: 12,
                         mapTypeControl: false,
                         streetViewControl: false,
@@ -221,7 +244,7 @@ export default function PlaceSearchInput(props: {
                 const map = L.map(mapElementRef.current, {
                     zoomControl: true,
                     attributionControl: false,
-                }).setView(DEFAULT_CENTER, 12);
+                }).setView(mapCenter, 12);
 
                 const localTiles = L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(map);
                 localTiles.on?.("tileerror", () => {
@@ -252,7 +275,7 @@ export default function PlaceSearchInput(props: {
         return () => {
             mounted = false;
         };
-    }, [googleMapEnabled, props.planId]);
+    }, [googleMapEnabled, mapCenter, props.planId]);
 
     const selectPlace = (item: PlaceResult) => {
         if (!hasValidCoordinates(item.lat, item.lon)) {
@@ -284,14 +307,19 @@ export default function PlaceSearchInput(props: {
 
     const addPlace = () => {
         if (!canAdd) return;
-        props.onSelect({
+        const place = {
             id: selectedPlace?.id ?? `manual:${parsedLat.toFixed(6)},${parsedLon.toFixed(6)}`,
             title: manualName.trim(),
             displayTitle: manualName.trim(),
+            titleKo: selectedPlace?.titleKo,
+            titleEn: selectedPlace?.titleEn,
+            titleJa: selectedPlace?.titleJa,
             subtitle: selectedPlace?.subtitle ?? `${parsedLat.toFixed(6)}, ${parsedLon.toFixed(6)}`,
             lat: parsedLat,
             lon: parsedLon,
-        });
+        };
+        void recordPlaceSelection(place, q, selectedPlace ? provider : "manual", props.planId);
+        props.onSelect(place);
     };
 
     return (
@@ -400,6 +428,30 @@ export default function PlaceSearchInput(props: {
                 </div>
 
                 <div className="mt-3 max-h-[220px] overflow-auto rounded-lg border border-gray-200 sm:max-h-[320px]">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
+                        <div className="text-xs font-bold text-gray-600">
+                            {props.origin
+                                ? <>이전 경로{props.origin.name ? ` "${props.origin.name}"` : ""} 기준</>
+                                : "검색 결과"}
+                        </div>
+                        <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
+                            <button
+                                type="button"
+                                onClick={() => setSortMode("relevance")}
+                                className={`rounded-md px-2.5 py-1 text-xs font-black ${sortMode === "relevance" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                            >
+                                관련순
+                            </button>
+                            <button
+                                type="button"
+                                disabled={!props.origin}
+                                onClick={() => setSortMode("distance")}
+                                className={`rounded-md px-2.5 py-1 text-xs font-black ${sortMode === "distance" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"} disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent`}
+                            >
+                                가까운순
+                            </button>
+                        </div>
+                    </div>
                     {loading ? (
                         <div className="p-4 text-sm text-gray-500">검색 중...</div>
                     ) : error ? (
@@ -408,7 +460,7 @@ export default function PlaceSearchInput(props: {
                         <div className="p-4 text-sm text-gray-500">검색 결과 없음</div>
                     ) : (
                         <ul>
-                            {items.map((item) => (
+                            {rankedItems.map((item) => (
                                 <li key={item.id}>
                                     <button
                                         type="button"
@@ -416,8 +468,20 @@ export default function PlaceSearchInput(props: {
                                         className="w-full border-b px-3 py-3 text-left last:border-b-0 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                                         onClick={() => selectPlace(item)}
                                     >
-                                        <div className="font-medium">{item.displayTitle ?? item.title}</div>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0 font-medium">{item.displayTitle ?? item.title}</div>
+                                            {item.distanceFromOriginKm !== null && (
+                                                <span className="shrink-0 rounded-full bg-gray-950 px-2 py-0.5 text-[11px] font-black text-white">
+                                                    {formatDistanceKm(item.distanceFromOriginKm)}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="mt-0.5 text-xs text-gray-500">{item.subtitle}</div>
+                                        {item.distanceFromOriginKm !== null && (
+                                            <div className="mt-1 text-xs font-semibold text-gray-600">
+                                                이전 경로에서 {formatDistanceKm(item.distanceFromOriginKm)}
+                                            </div>
+                                        )}
                                         {!hasValidCoordinates(item.lat, item.lon) && (
                                             <div className="mt-1 text-xs font-semibold text-red-500">
                                                 좌표 없음
@@ -464,6 +528,60 @@ function hasValidCoordinates(lat: number, lon: number) {
         lon >= -180 &&
         lon <= 180
     );
+}
+
+function rankPlacesByOrigin(items: PlaceResult[], origin?: PlaceSearchOrigin | null, sortMode: SortMode = "relevance"): RankedPlaceResult[] {
+    const ranked = items.map((item) => ({
+        ...item,
+        distanceFromOriginKm: origin && hasValidCoordinates(item.lat, item.lon)
+            ? haversineKm(origin.lat, origin.lon, item.lat, item.lon)
+            : null,
+    }));
+    if (!origin || sortMode === "relevance") return ranked;
+    return ranked.sort((left, right) => {
+        if (left.distanceFromOriginKm === null && right.distanceFromOriginKm === null) return 0;
+        if (left.distanceFromOriginKm === null) return 1;
+        if (right.distanceFromOriginKm === null) return -1;
+        return left.distanceFromOriginKm - right.distanceFromOriginKm;
+    });
+}
+
+function haversineKm(fromLat: number, fromLon: number, toLat: number, toLon: number) {
+    const radiusKm = 6371.0088;
+    const dLat = toRadians(toLat - fromLat);
+    const dLon = toRadians(toLon - fromLon);
+    const lat1 = toRadians(fromLat);
+    const lat2 = toRadians(toLat);
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return radiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function toRadians(value: number) {
+    return value * Math.PI / 180;
+}
+
+function formatDistanceKm(value: number) {
+    if (value < 1) return `${Math.round(value * 1000)}m`;
+    return `${value.toFixed(value < 10 ? 1 : 0)}km`;
+}
+
+async function recordPlaceSelection(place: PlaceResult, query: string, provider: SearchProvider | "manual", planId?: string) {
+    try {
+        await fetch("/api/place/selection", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                place,
+                query,
+                provider,
+                planId,
+            }),
+        });
+    } catch {
+        // Place memory is best-effort; selecting a place should not fail when logging is unavailable.
+    }
 }
 
 function placeMarker(
