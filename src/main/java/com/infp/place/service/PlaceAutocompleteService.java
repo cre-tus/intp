@@ -1,17 +1,20 @@
 package com.infp.place.service;
 
 import com.infp.place.client.NominatimClient;
+import com.infp.place.client.PhotonClient;
 import com.infp.place.dto.PlaceItem;
 import com.infp.place.util.Geo;
+import com.infp.place.util.CountryPlaceFilter;
 import com.infp.place.util.QueryVariantBuilder;
+import com.infp.place.util.KoreanPlaceNameResolver;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.*;
@@ -20,32 +23,41 @@ import java.util.*;
 public class PlaceAutocompleteService {
 
     private static final Duration RESOLVED_CACHE_TTL = Duration.ofDays(7);
-    private static final String CACHE_VERSION = "v5";
-    // 좌표 정규화 로그 테스트
-    private static final Logger log = LoggerFactory.getLogger(PlaceAutocompleteService.class);
+    private static final Duration SELECTED_CACHE_TTL = Duration.ofDays(7);
+    private static final String CACHE_VERSION = "v18";
+    private static final String SELECTED_CACHE_VERSION = "v1";
     private static final Duration CACHE_TTL = Duration.ofHours(6);
     private static final TypeReference<List<PlaceItem>> PLACE_LIST_TYPE = new TypeReference<>() {};
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final StringRedisTemplate redisTemplate;
     private final PlaceMemoryService placeMemoryService;
     private final PlaceRankingModel rankingModel;
+    private final PlaceSearchCacheVersion cacheVersion;
+    private final PlaceTranslationService translationService;
 
     /**
      * Nominatim 외부 호출 전담 클라이언트
      * (HTTP 호출 책임 분리)
      */
     private final NominatimClient nominatimClient;
+    private final PhotonClient photonClient;
 
     public PlaceAutocompleteService(
             NominatimClient nominatimClient,
+            PhotonClient photonClient,
             StringRedisTemplate redisTemplate,
             PlaceMemoryService placeMemoryService,
-            PlaceRankingModel rankingModel
+            PlaceRankingModel rankingModel,
+            PlaceSearchCacheVersion cacheVersion,
+            PlaceTranslationService translationService
     ) {
         this.nominatimClient = nominatimClient;
+        this.photonClient = photonClient;
         this.redisTemplate = redisTemplate;
         this.placeMemoryService = placeMemoryService;
         this.rankingModel = rankingModel;
+        this.cacheVersion = cacheVersion;
+        this.translationService = translationService;
     }
 
     /**
@@ -67,6 +79,27 @@ public class PlaceAutocompleteService {
     }
 
     public Mono<List<PlaceItem>> autocomplete(String q, String countryCode) {
+        return autocomplete(q, countryCode, null, null);
+    }
+
+    public Mono<List<PlaceItem>> searchNominatimOnly(String q, String countryCode) {
+        String query = q == null ? "" : q.trim();
+        if (query.isEmpty()) return Mono.just(List.of());
+        String country = normalizeCountry(countryCode);
+        return translationService.expandQueryVariants(query, country)
+                .flatMapMany(Flux::fromIterable)
+                .flatMap(variant -> nominatimClient.search(variant, country)
+                        .flatMapMany(raw -> Flux.fromIterable(mapToPlaceItems(raw, query))))
+                .collect(() -> new LinkedHashMap<String, PlaceItem>(),
+                        (items, item) -> items.putIfAbsent(item.id(), item))
+                .map(items -> items.values().stream()
+                        .sorted(Comparator.comparingDouble(PlaceItem::importance).reversed())
+                        .limit(20)
+                        .toList())
+                .flatMap(translationService::localizeResults);
+    }
+
+    public Mono<List<PlaceItem>> autocomplete(String q, String countryCode, Double originLat, Double originLon) {
 
         // 🔹 1) null 방지 + trim 처리
         String s = q == null ? "" : q.trim();
@@ -76,27 +109,26 @@ public class PlaceAutocompleteService {
             return Mono.just(List.of());
         }
 
-        List<PlaceItem> memoryItems = placeMemoryService.search(s, 20);
-        if (memoryItems.size() >= 10) {
-            return Mono.just(memoryItems);
-        }
-
         String country = normalizeCountry(countryCode);
+        List<PlaceItem> memoryItems = placeMemoryService.search(s, country, 20).stream()
+                .filter(item -> CountryPlaceFilter.isAllowed(item, country))
+                .toList();
 
-        PlaceItem resolved = readResolvedCache(s, country);
+        boolean locationBiased = originLat != null && originLon != null;
+        List<PlaceItem> selectedItems = readSelectedCache(s, country);
+        List<PlaceItem> immediateItems = mergeAndRank(s, country, memoryItems, selectedItems, 20, originLat, originLon);
+        PlaceItem resolved = locationBiased ? null : readResolvedCache(s, country);
         if (resolved != null) {
-            return Mono.just(mergeAndRank(s, memoryItems, List.of(resolved), 20));
+            return translationService.localizeResults(mergeAndRank(s, country, immediateItems, List.of(resolved), 20, null, null));
         }
 
-        List<PlaceItem> cached = readCache(s, country);
+        List<PlaceItem> cached = locationBiased ? null : readCache(s, country);
         if (cached != null) {
-            return Mono.just(mergeAndRank(s, memoryItems, cached, 20));
+            return translationService.localizeResults(mergeAndRank(s, country, immediateItems, cached, 20, null, null));
         }
 
         // 🔹 2) 후보 생성 (최대 5개)
         // 예: 도쿄타워 → ["도쿄타워", "도쿄 타워"]
-        List<String> variants = QueryVariantBuilder.build(s);
-
         /**
          * 🔹 3) 병렬 호출 구조
          *
@@ -110,14 +142,18 @@ public class PlaceAutocompleteService {
          * flatMapIterable
          *   → List<PlaceItem> → PlaceItem 개별 요소로 풀기
          */
-        return Flux.fromIterable(variants)
+        return translationService.expandQueryVariants(s, country)
+                .flatMapMany(Flux::fromIterable)
 
                 // 후보마다 Nominatim 호출 (비동기 병렬 실행)
-                .flatMap(v ->
-                        nominatimClient.search(v, country)
-                                // JSON 응답을 우리 DTO로 매핑
-                                .map(list -> mapToPlaceItems(list, v))
-                )
+                .flatMap(v -> Mono.zip(
+                        nominatimClient.search(v, country, originLat, originLon).map(list -> mapToPlaceItems(list, s)),
+                        photonClient.search(v, country, s, originLat, originLon)
+                ).map(pair -> {
+                    List<PlaceItem> combined = new ArrayList<>(pair.getT1());
+                    combined.addAll(pair.getT2());
+                    return combined;
+                }))
 
                 // List<PlaceItem> → PlaceItem 단위로 flatten
                 .flatMapIterable(x -> x)
@@ -146,37 +182,95 @@ public class PlaceAutocompleteService {
                                     .reversed()
                     );
 
-                    // 🔹 JSON 로그 출력 (여기 추가)
-                    try {
-                        String json = objectMapper.writeValueAsString(out);
-                        log.info("🔥 Nominatim → PlaceItem 변환 결과(JSON): {}", json);
-                    } catch (Exception e) {
-                        log.error("JSON 변환 실패", e);
-                    }
-
-                    // 🔹 상위 15개 제한
-                    return mergeAndRank(s, memoryItems, out, 20);
+                    return mergeAndRank(s, country, immediateItems, out, 20, originLat, originLon);
                 })
+                .flatMap(translationService::localizeResults)
                 .doOnNext(result -> {
-                    writeCache(s, country, result);
-                    writeResolvedCaches(s, country, result);
+                    if (!locationBiased) {
+                        writeCache(s, country, result);
+                        writeResolvedCaches(s, country, result);
+                    }
                 });
     }
 
-    private List<PlaceItem> mergeAndRank(String query, List<PlaceItem> first, List<PlaceItem> second, int limit) {
+    private List<PlaceItem> mergeAndRank(
+            String query,
+            String countryCode,
+            List<PlaceItem> first,
+            List<PlaceItem> second,
+            int limit,
+            Double originLat,
+            Double originLon
+    ) {
         LinkedHashMap<String, PlaceItem> merged = new LinkedHashMap<>();
         for (PlaceItem item : first) {
+            if (!CountryPlaceFilter.isAllowed(item, countryCode)) continue;
             merged.putIfAbsent(placeMergeKey(item), item);
         }
         for (PlaceItem item : second) {
+            if (!CountryPlaceFilter.isAllowed(item, countryCode)) continue;
             merged.putIfAbsent(placeMergeKey(item), item);
         }
         List<PlaceItem> ranked = new ArrayList<>(merged.values());
-        ranked.sort(Comparator
-                .comparingDouble((PlaceItem item) -> rankingModel.score(query, item))
+        Comparator<PlaceItem> rankingComparator = Comparator
+                .comparingDouble((PlaceItem item) -> locationAwareScore(query, item, originLat, originLon))
                 .reversed()
-                .thenComparing(PlaceItem::title, Comparator.nullsLast(String::compareToIgnoreCase)));
-        return ranked.size() > limit ? ranked.subList(0, limit) : ranked;
+                .thenComparing(PlaceItem::title, Comparator.nullsLast(String::compareToIgnoreCase));
+        ranked.sort(rankingComparator);
+        List<PlaceItem> deduplicated = new ArrayList<>();
+        for (PlaceItem item : ranked) {
+            if (deduplicated.stream().anyMatch(existing -> isNearbyDuplicate(existing, item))) continue;
+            deduplicated.add(item);
+        }
+        return deduplicated.stream().limit(limit).toList();
+    }
+
+    private double locationAwareScore(String query, PlaceItem item, Double originLat, Double originLon) {
+        double textScore = rankingModel.scoreWithVariants(query, item) + providerQualityBoost(item);
+        if (!validCoordinate(originLat, originLon)) return textScore;
+
+        double distanceKm = distanceKm(originLat, originLon, item.lat(), item.lon());
+        // Nearby branches of nationwide chains should win without hiding valid inter-city results.
+        double proximityBoost = 5.0 / (1.0 + distanceKm / 25.0);
+        return textScore + proximityBoost;
+    }
+
+    private double providerQualityBoost(PlaceItem item) {
+        return switch (searchProvider(item)) {
+            case "custom" -> 0.45;
+            case "redis" -> 0.30;
+            case "nominatim" -> 0.15;
+            default -> 0.0;
+        };
+    }
+
+    private boolean validCoordinate(Double lat, Double lon) {
+        return lat != null && lon != null
+                && Double.isFinite(lat) && Double.isFinite(lon)
+                && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
+    }
+
+    private double distanceKm(double lat1, double lon1, double lat2, double lon2) {
+        double radiusKm = 6371.0088;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return radiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    private boolean isNearbyDuplicate(PlaceItem first, PlaceItem second) {
+        if (!searchProvider(first).equals(searchProvider(second))) return false;
+        String firstTitle = normalizedKey(first.displayTitle() == null || first.displayTitle().isBlank() ? first.title() : first.displayTitle());
+        String secondTitle = normalizedKey(second.displayTitle() == null || second.displayTitle().isBlank() ? second.title() : second.displayTitle());
+        if (!firstTitle.equals(secondTitle)) return false;
+        return Math.abs(first.lat() - second.lat()) <= 0.01 && Math.abs(first.lon() - second.lon()) <= 0.012;
+    }
+
+    private String searchProvider(PlaceItem item) {
+        String provider = item.provider() != null ? item.provider() : PlaceItem.inferProvider(item.id());
+        return provider.toLowerCase(Locale.ROOT);
     }
 
     private String placeMergeKey(PlaceItem item) {
@@ -189,7 +283,9 @@ public class PlaceAutocompleteService {
     private List<PlaceItem> readCache(String query, String countryCode) {
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey(query, countryCode));
-            return cached == null ? null : objectMapper.readValue(cached, PLACE_LIST_TYPE);
+            if (cached == null) return null;
+            List<PlaceItem> list = objectMapper.readValue(cached, PLACE_LIST_TYPE);
+            return list.stream().map(this::asCachedResult).toList();
         } catch (Exception ignored) {
             return null;
         }
@@ -204,13 +300,16 @@ public class PlaceAutocompleteService {
     }
 
     private String cacheKey(String query, String countryCode) {
-        return "place:autocomplete:" + CACHE_VERSION + ":" + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
+        return "place:autocomplete:" + CACHE_VERSION + ":g" + cacheVersion.current() + ":"
+                + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
     }
 
     private PlaceItem readResolvedCache(String query, String countryCode) {
         try {
             String cached = redisTemplate.opsForValue().get(resolvedCacheKey(query, countryCode));
-            return cached == null ? null : objectMapper.readValue(cached, PlaceItem.class);
+            if (cached == null) return null;
+            PlaceItem item = objectMapper.readValue(cached, PlaceItem.class);
+            return asCachedResult(item);
         } catch (Exception ignored) {
             return null;
         }
@@ -218,8 +317,8 @@ public class PlaceAutocompleteService {
 
     private void writeResolvedCaches(String query, String countryCode, List<PlaceItem> result) {
         if (result == null || result.isEmpty()) return;
+        writeResolvedCache(query, countryCode, result.get(0));
         for (PlaceItem item : result) {
-            writeResolvedCache(query, countryCode, item);
             writeResolvedCache(item.title(), countryCode, item);
             writeResolvedCache(item.displayTitle(), countryCode, item);
             writeResolvedCache(item.titleKo(), countryCode, item);
@@ -238,7 +337,88 @@ public class PlaceAutocompleteService {
     }
 
     private String resolvedCacheKey(String query, String countryCode) {
-        return "place:resolved:" + CACHE_VERSION + ":" + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
+        return "place:resolved:" + CACHE_VERSION + ":g" + cacheVersion.current() + ":"
+                + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
+    }
+
+    /**
+     * Keeps an explicitly selected itinerary place immediately searchable. This cache is deliberately
+     * independent from the autocomplete generation because recording another selection advances that
+     * generation. Google-backed items remain cache-only and expire within 30 days.
+     */
+    public void rememberSelection(PlaceItem item, String query, String countryCode) {
+        rememberSelection(item, query, countryCode, Duration.ofDays(7));
+    }
+
+    private void rememberSelection(PlaceItem item, String query, String countryCode, Duration ttl) {
+        if (item == null) return;
+        String country = normalizeCountry(countryCode);
+        LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        addSelectionAliases(aliases, query);
+        addSelectionAliases(aliases, item.sourceQuery());
+        addSelectionAliases(aliases, item.title());
+        addSelectionAliases(aliases, item.displayTitle());
+        addSelectionAliases(aliases, item.titleKo());
+        addSelectionAliases(aliases, item.titleEn());
+        addSelectionAliases(aliases, item.titleJa());
+        aliases.forEach(alias -> writeSelectedCache(alias, country, item, ttl));
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void warmRecentSelectionCache() {
+        placeMemoryService.recentSelectionsForCache().forEach(selection ->
+                rememberSelection(
+                        selection.place(),
+                        selection.query(),
+                        selection.countryCode(),
+                        selection.remainingTtl()
+                )
+        );
+    }
+
+    private void addSelectionAliases(Set<String> aliases, String value) {
+        if (value == null || value.isBlank()) return;
+        aliases.addAll(QueryVariantBuilder.build(value));
+    }
+
+    private List<PlaceItem> readSelectedCache(String query, String countryCode) {
+        try {
+            String cached = redisTemplate.opsForValue().get(selectedCacheKey(query, countryCode));
+            if (cached == null) return List.of();
+            List<PlaceItem> list = objectMapper.readValue(cached, PLACE_LIST_TYPE);
+            return list.stream().map(this::asCachedResult).toList();
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private PlaceItem asCachedResult(PlaceItem item) {
+        return "custom".equalsIgnoreCase(item.provider()) || "custom".equals(PlaceItem.inferProvider(item.id()))
+                ? item.withProvider("custom")
+                : item.withProvider("redis");
+    }
+
+    private void writeSelectedCache(String alias, String countryCode, PlaceItem item, Duration ttl) {
+        if (alias == null || alias.isBlank()) return;
+        try {
+            List<PlaceItem> existing = readSelectedCache(alias, countryCode);
+            LinkedHashMap<String, PlaceItem> selected = new LinkedHashMap<>();
+            selected.put(placeMergeKey(item), item);
+            existing.forEach(value -> selected.putIfAbsent(placeMergeKey(value), value));
+            List<PlaceItem> retained = selected.values().stream().limit(20).toList();
+            redisTemplate.opsForValue().set(
+                    selectedCacheKey(alias, countryCode),
+                    objectMapper.writeValueAsString(retained),
+                    ttl
+            );
+        } catch (Exception ignored) {
+            // Selection recording must still succeed when Redis is unavailable.
+        }
+    }
+
+    private String selectedCacheKey(String query, String countryCode) {
+        return "place:selected:" + SELECTED_CACHE_VERSION + ":"
+                + normalizeCountry(countryCode) + ":" + Integer.toHexString(normalizedKey(query).hashCode());
     }
 
     private String normalizeCountry(String countryCode) {
@@ -266,7 +446,7 @@ public class PlaceAutocompleteService {
 
     private List<PlaceItem> mapToPlaceItems(
             List<Map<String, Object>> raw,
-            String sourceQuery
+            String userQuery
     ) {
 
         List<PlaceItem> out = new ArrayList<>();
@@ -295,14 +475,10 @@ public class PlaceAutocompleteService {
                     names.get("official_name:en")
             );
             String titleJa = firstPresent(
-                    names.get("name:ja"),
-                    names.get("name")
+                    names.get("name:ja")
             );
-            String title = !titleKo.isBlank()
-                    ? titleKo
-                    : !name.isBlank()
-                    ? name
-                    : firstToken(display);
+            titleKo = KoreanPlaceNameResolver.resolveTitle(titleKo, userQuery, name, titleEn, titleJa, display);
+            String title = !name.isBlank() ? name : firstToken(display);
             String displayTitle = buildDisplayTitle(title, titleKo, titleEn, titleJa);
 
 
@@ -330,13 +506,15 @@ public class PlaceAutocompleteService {
                     lat,
                     lon,
                     importance,
-                    sourceQuery
+                    userQuery,
+                    str(r.get("category")),
+                    str(r.get("type")),
+                    "nominatim"
             ));
         }
 
         return out;
     }
-
     /**
      * display_name에서 첫 번째 콤마 전까지 잘라서
      * 간단한 제목으로 사용
@@ -376,7 +554,11 @@ public class PlaceAutocompleteService {
     private static String buildDisplayTitle(String title, String titleKo, String titleEn, String titleJa) {
         String main = !titleKo.isBlank() ? titleKo : title;
         List<String> originals = new ArrayList<>();
-        if (!titleEn.isBlank() && !titleEn.equalsIgnoreCase(main)) {
+        if (!title.isBlank() && !title.equalsIgnoreCase(main)) {
+            originals.add(title);
+        }
+        if (!titleEn.isBlank() && !titleEn.equalsIgnoreCase(main)
+                && originals.stream().noneMatch(titleEn::equalsIgnoreCase)) {
             originals.add(titleEn);
         }
         if (!titleJa.isBlank() && !titleJa.equals(main) && originals.stream().noneMatch(titleJa::equalsIgnoreCase)) {

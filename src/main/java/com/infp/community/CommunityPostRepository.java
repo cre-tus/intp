@@ -29,6 +29,7 @@ public interface CommunityPostRepository extends JpaRepository<CommunityPostEnti
             from CommunityPostEntity post
             where lower(post.title) like lower(concat('%', :keyword, '%'))
                or post.caption like concat('%', :keyword, '%')
+               or post.questionDetail like concat('%', :keyword, '%')
                or lower(post.city) like lower(concat('%', :keyword, '%'))
             order by post.createdAt desc
             """)

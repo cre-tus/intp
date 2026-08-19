@@ -48,6 +48,19 @@ let loadedKey = "";
 export async function loadGoogleMaps(planId: string): Promise<GoogleMapsApi> {
     if (typeof window === "undefined") throw new Error("Browser only");
     const key = await fetchGoogleMapsKey(planId);
+    return loadGoogleMapsScript(key);
+}
+
+export async function loadAdminGoogleMaps(): Promise<GoogleMapsApi> {
+    if (typeof window === "undefined") throw new Error("Browser only");
+    const response = await fetch("/api/admin/place-dataset/google-maps-key", { cache: "no-store" });
+    if (!response.ok) throw new Error(await response.text() || "Google 지도 설정을 불러오지 못했습니다.");
+    const data = await response.json() as { apiKey?: string };
+    if (!data.apiKey) throw new Error("Google Maps API 키가 없습니다.");
+    return loadGoogleMapsScript(data.apiKey);
+}
+
+async function loadGoogleMapsScript(key: string): Promise<GoogleMapsApi> {
     if (window.google?.maps && loadedKey === key) return window.google.maps;
     if (scriptPromise && loadedKey === key) return scriptPromise;
 

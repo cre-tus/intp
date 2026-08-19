@@ -8,9 +8,11 @@ import {
 } from "@/lib/travelPlans";
 
 export type CommunityImageKey = "tokyo" | "osaka" | "sapporo" | "fukuoka" | "nagoya";
+export type CommunityPostType = "plan" | "photo" | "qna";
 
 export type CommunityPost = {
     id: number;
+    postType?: CommunityPostType;
     planId?: string | null;
     authorId: number;
     author: string;
@@ -22,7 +24,16 @@ export type CommunityPost = {
     budget: string;
     imageKey: CommunityImageKey;
     imageUrl?: string | null;
+    mediaType?: "image" | "video" | null;
+    mediaUrl?: string | null;
+    mediaOriginalFilename?: string | null;
+    mediaMimeType?: string | null;
+    mediaSizeBytes?: number | null;
+    mediaDurationSeconds?: number | null;
     caption: string;
+    questionDetail?: string | null;
+    attempted?: string | null;
+    answerPreference?: string | null;
     tags: string[];
     route: string[];
     likes: number;
@@ -36,6 +47,7 @@ export type CommunityPost = {
 };
 
 export type CommunityPostPayload = {
+    postType?: CommunityPostType;
     planId?: string;
     title: string;
     city: string;
@@ -43,7 +55,16 @@ export type CommunityPostPayload = {
     budget: string;
     imageKey: CommunityImageKey;
     imageUrl?: string | null;
+    mediaType?: "image" | "video" | null;
+    mediaUrl?: string | null;
+    mediaOriginalFilename?: string | null;
+    mediaMimeType?: string | null;
+    mediaSizeBytes?: number | null;
+    mediaDurationSeconds?: number | null;
     caption: string;
+    questionDetail?: string | null;
+    attempted?: string | null;
+    answerPreference?: string | null;
     tags: string[];
     route: string[];
 };
@@ -52,6 +73,21 @@ export type CommunityReaction = {
     postId: number;
     active: boolean;
     count: number;
+};
+
+export type CommunityCommentReaction = {
+    commentId: number;
+    active: boolean;
+    count: number;
+};
+
+export type CommunityMediaUpload = {
+    mediaType: "image" | "video";
+    mediaUrl: string;
+    originalFilename?: string | null;
+    mimeType?: string | null;
+    sizeBytes: number;
+    durationSeconds?: number | null;
 };
 
 export type CommunityComment = {
@@ -63,6 +99,8 @@ export type CommunityComment = {
     content: string;
     ownComment: boolean;
     edited: boolean;
+    likes: number;
+    liked: boolean;
     createdAt: string;
     updatedAt: string;
 };
@@ -95,39 +133,93 @@ export type CommunityUserProfile = {
     feed: CommunityPost[];
 };
 
+export function isCommunityQnaPost(post: CommunityPost) {
+    return post.postType === "qna" || Boolean(post.questionDetail?.trim());
+}
+
+export function normalizeCommunityPost(post: CommunityPost): CommunityPost {
+    if (isCommunityQnaPost(post)) {
+        return {
+            ...post,
+            postType: "qna",
+            caption: post.caption || post.questionDetail || "",
+        };
+    }
+    return {
+        ...post,
+        postType: post.postType ?? (post.planId ? "plan" : "photo"),
+    };
+}
+
+export function normalizeCreatedCommunityPost(post: CommunityPost, payload: CommunityPostPayload): CommunityPost {
+    if (payload.postType !== "qna") return normalizeCommunityPost(post);
+    return normalizeCommunityPost({
+        ...post,
+        postType: "qna",
+        planId: null,
+        imageUrl: post.imageUrl || payload.imageUrl || null,
+        mediaType: post.mediaType || payload.mediaType || null,
+        mediaUrl: post.mediaUrl || payload.mediaUrl || null,
+        caption: post.caption || payload.questionDetail || payload.caption || "",
+        questionDetail: post.questionDetail || payload.questionDetail || payload.caption || "",
+        attempted: post.attempted || payload.attempted || null,
+        answerPreference: post.answerPreference || payload.answerPreference || null,
+    });
+}
+
+export function forceCommunityQnaPost(post: CommunityPost): CommunityPost {
+    return normalizeCommunityPost({
+        ...post,
+        postType: "qna",
+        planId: null,
+        imageUrl: post.imageUrl ?? null,
+        mediaType: post.mediaType ?? null,
+        mediaUrl: post.mediaUrl ?? null,
+        questionDetail: post.questionDetail || post.caption || "",
+        caption: post.caption || post.questionDetail || "",
+    });
+}
+
+function normalizeCommunityPosts(posts: CommunityPost[]) {
+    return posts.map(normalizeCommunityPost);
+}
+
 export async function loadCommunityPosts() {
     const response = await api.get<CommunityPost[]>("/api/community/posts");
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function loadMyCommunityPosts() {
     const response = await api.get<CommunityPost[]>("/api/community/posts/me");
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function loadCommunityUserProfile(userId: number) {
     const response = await api.get<CommunityUserProfile>(`/api/community/posts/users/${userId}/profile`);
-    return response.data;
+    return {
+        ...response.data,
+        feed: normalizeCommunityPosts(response.data.feed ?? []),
+    };
 }
 
 export async function loadSavedCommunityPosts() {
     const response = await api.get<CommunityPost[]>("/api/community/posts/saved");
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function loadFollowingCommunityPosts() {
     const response = await api.get<CommunityPost[]>("/api/community/posts/following");
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function loadPopularCommunityPosts() {
     const response = await api.get<CommunityPost[]>("/api/community/posts/popular");
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function searchCommunityPosts(params: { q?: string; region?: string }) {
     const response = await api.get<CommunityPost[]>("/api/community/posts/search", { params });
-    return response.data;
+    return normalizeCommunityPosts(response.data);
 }
 
 export async function searchCommunityRegions(q?: string) {
@@ -137,11 +229,23 @@ export async function searchCommunityRegions(q?: string) {
 
 export async function createCommunityPost(payload: CommunityPostPayload) {
     const response = await api.post<CommunityPost>("/api/community/posts", payload);
-    return response.data;
+    return normalizeCommunityPost(response.data);
 }
 
 export async function updateCommunityPost(postId: number, payload: CommunityPostPayload) {
     const response = await api.put<CommunityPost>(`/api/community/posts/${postId}`, payload);
+    return normalizeCommunityPost(response.data);
+}
+
+export async function uploadCommunityPostMedia(file: File, durationSeconds?: number | null) {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (durationSeconds !== undefined && durationSeconds !== null) {
+        formData.append("durationSeconds", String(Math.floor(durationSeconds)));
+    }
+    const response = await api.post<CommunityMediaUpload>("/api/community/posts/media", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
     return response.data;
 }
 
@@ -178,6 +282,11 @@ export async function deleteCommunityPostComment(postId: number, commentId: numb
     await api.delete(`/api/community/posts/${postId}/comments/${commentId}`);
 }
 
+export async function toggleCommunityPostCommentLike(postId: number, commentId: number) {
+    const response = await api.post<CommunityCommentReaction>(`/api/community/posts/${postId}/comments/${commentId}/like`);
+    return response.data;
+}
+
 export async function loadCommunityPlanView(postId: number) {
     const response = await api.get<CommunityPlanView>(`/api/community/posts/${postId}/plan`);
     return {
@@ -204,6 +313,7 @@ function parseCommunityPlanContent(view: CommunityPlanView): TravelPlanDraft {
         title: view.title,
         template: view.template,
         tier: view.tier,
+        costCurrency: parsed.costCurrency === "JPY" ? "JPY" : "KRW",
         tripContext: {
             countryCode: parsed.tripContext?.countryCode ?? "KR",
             companionType: parsed.tripContext?.companionType ?? "unknown",

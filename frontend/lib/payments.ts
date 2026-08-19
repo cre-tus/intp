@@ -26,6 +26,7 @@ export async function createPaymentRequest(input: {
     depositorName: string;
     depositBank: string;
     depositAccount: string;
+    resubmit?: boolean;
 }) {
     const response = await api.post<PaymentRequest>("/api/payments", input);
     return response.data;

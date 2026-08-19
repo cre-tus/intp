@@ -49,7 +49,7 @@ public class RouteOptimizationService {
         List<RoutePoint> normalized = validateAndNormalize(points);
         CostMatrix matrix = buildCostMatrix(normalized);
 
-        if (normalized.size() <= 2) {
+        if (normalized.size() <= 1 || (normalized.size() == 2 && normalized.stream().noneMatch(this::hasRouteConstraint))) {
             return ensureWithinTimeLimit(buildResponse(normalized, matrix, started));
         }
 
@@ -257,8 +257,10 @@ public class RouteOptimizationService {
 
     private List<RoutePoint> optimizeWithConstraints(List<RoutePoint> points, CostMatrix matrix) {
         RoutePoint lodging = firstByRole(points, "LODGING");
-        RoutePoint start = lodging != null ? lodging : firstByRole(points, "START");
-        RoutePoint end = lodging != null ? lodging : firstByRole(points, "END");
+        RoutePoint fixedStart = firstByRole(points, "START");
+        RoutePoint fixedEnd = firstByRole(points, "END");
+        RoutePoint start = fixedStart != null ? fixedStart : lodging;
+        RoutePoint end = lodging != null ? lodging : (fixedEnd != null ? fixedEnd : fixedStart);
         List<RoutePoint> fixed = points.stream()
                 .filter(point -> "FIXED".equals(point.routeRole()))
                 .sorted(Comparator
@@ -272,12 +274,10 @@ public class RouteOptimizationService {
             return optimizeRoute(points, null, null, matrix);
         }
 
-        List<RoutePoint> anchors = new ArrayList<>();
+        Set<RoutePoint> anchors = new HashSet<>();
         if (start != null) anchors.add(start);
-        for (RoutePoint point : fixed) {
-            if (!anchors.contains(point)) anchors.add(point);
-        }
-        if (end != null && !anchors.contains(end)) anchors.add(end);
+        anchors.addAll(fixed);
+        if (end != null) anchors.add(end);
 
         List<RoutePoint> route = new ArrayList<>();
         Set<RoutePoint> used = new HashSet<>();
@@ -287,8 +287,7 @@ public class RouteOptimizationService {
         }
 
         int cursor = 0;
-        for (RoutePoint anchor : anchors) {
-            if (used.contains(anchor) && anchor != end) continue;
+        for (RoutePoint anchor : fixed) {
             RoutePoint previousAnchor = route.isEmpty() ? null : route.get(route.size() - 1);
             int anchorIndex = points.indexOf(anchor);
             List<RoutePoint> segment = points.subList(cursor, Math.max(cursor, anchorIndex)).stream()
@@ -323,6 +322,10 @@ public class RouteOptimizationService {
                 .filter(point -> role.equals(point.routeRole()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean hasRouteConstraint(RoutePoint point) {
+        return List.of("LODGING", "START", "END", "FIXED").contains(point.routeRole());
     }
 
     private List<RoutePoint> optimizeSegment(List<RoutePoint> points, RoutePoint start, RoutePoint end, CostMatrix matrix) {

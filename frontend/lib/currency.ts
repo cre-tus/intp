@@ -12,9 +12,18 @@ export const DEFAULT_CURRENCY: CurrencyRate = {
     baseRate: "1",
 };
 
+export const STORED_JPY_CURRENCY: CurrencyRate = {
+    unit: "JPY",
+    name: "일본 엔 (입력값 그대로)",
+    baseRate: "1",
+};
+
 export function formatCurrencyAmount(amountKrw: number, currency: CurrencyRate) {
     if (currency.unit === "KRW") {
         return `${Math.round(amountKrw).toLocaleString()}원`;
+    }
+    if (currency.unit === "JPY") {
+        return `${Math.round(amountKrw).toLocaleString()}엔`;
     }
 
     const rate = parseExchangeRate(currency.baseRate);

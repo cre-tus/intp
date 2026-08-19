@@ -1,10 +1,20 @@
-# INTP 여행 플래너 모듈 명세서
+﻿# INTP 여행 플래너 모듈 명세서
 
 작성일: 2026-05-22
 
 ## 1. 문서 개요
 
 이 문서는 INTP 여행 플래너 프로젝트의 현재 구현 기준 모듈 구조, 책임, 주요 API, 데이터 의존성을 정리한다. 시스템은 Next.js 프론트엔드, Spring Boot 백엔드, MySQL, Redis, GTFS 데이터, nginx 리버스 프록시, Docker Compose 기반 인프라로 구성된다.
+
+## 2026-08-20 모듈 변경 요약
+
+- 관리자 프런트엔드: `/admin/ml-ingest`, `/admin/place-dataset`, `/admin/recommendation-compare`가 일정 수집·장소 검수·3모델 비교를 담당한다.
+- 관리자 백엔드: `AdminMlIngestController`, `AdminPlaceDatasetController`가 비동기 수집 작업, 좌표/내용/특징 검수, Overpass 검색, Nominatim 대체 및 병합 API를 제공한다.
+- 장소 모듈: `PhotonClient`, `OverpassClient`, `PlaceTranslationService`, `GooglePlaceRetentionService`가 Nominatim 중심 검색을 보강하고 Google 임시 데이터의 보존·만료를 관리한다.
+- 여행 모듈: `MlTrainingPlanSnapshotService`, `TravelPlanPlaceEnrichmentService`, `TravelPlanPlaceMergeService`가 승인 일정 스냅샷과 장소 정합성을 관리한다.
+- ML 모듈: `build_dataset.py`, `train.py`, `evaluate.py`, `incremental_quality_gate.py`, `prepare_common_evaluation.py`, `aggregate_cv_metrics.py`가 데이터 생성부터 교집합 평가와 승격까지 담당한다.
+- ML 런타임은 cosine baseline, MLP, GNN+MLP를 제공하며 관리자 비교 API는 동일 후보 집합으로 세 결과를 비교한다.
+- Docker 서비스는 `mysql`, `redis`, `gtfs-postgis`, `backend`, `frontend`, `ml-ingest`, `ml-recommender`, `nginx`, `certbot`, `tileserver`, `nominatim-jp`를 기본으로 사용하고 한국 Nominatim과 Photon은 profile로 선택 실행한다.
 
 ## 2. 아키텍처 스타일
 
@@ -115,7 +125,7 @@
 - 계획표 접근 권한과 수정 권한을 검증한다.
 - 계획표 본문 JSON과 검색/조회용 정규화 데이터를 함께 저장한다.
 - 참여자 목록을 `plan_members` 테이블과 동기화한다.
-- 엑셀형 템플릿 셀 데이터를 `plan_spreadsheet_cells` 테이블과 동기화한다.
+- 테이블형 템플릿 셀 데이터를 `plan_spreadsheet_cells` 테이블과 동기화한다.
 - 참여자 수가 0명인 소유 계획표를 자동 정리한다.
 - 유료 승인된 소유 계획표 여부를 검증한다.
 
@@ -150,7 +160,7 @@
 | 계획 메타데이터 | `plans` | external id, owner, title, template, tier, 날짜, 본문 JSON |
 | 전체 계획 본문 | `plans.content_json` | 프론트 상태 전체 스냅샷 |
 | 참여자 권한 | `plan_members` | OWNER, EDITOR, VIEWER, ACTIVE 상태 |
-| 엑셀형 셀 | `plan_spreadsheet_cells` | Day/row/cell 단위 검색 및 통계용 정규화 데이터 |
+| 테이블형 셀 | `plan_spreadsheet_cells` | Day/row/cell 단위 검색 및 통계용 정규화 데이터 |
 | 결제 요청 | `payment_requests` | 유료 전환 요청 및 승인 상태 |
 
 ## 4.3 협업 참여자 모듈
@@ -269,6 +279,8 @@ wss://{host}/ws/plans/{planId}
 - Nominatim 기반 장소 자동완성 결과를 제공한다.
 - 검색어 변형을 생성하여 장소 검색 성공률을 높인다.
 - Redis에 장소 자동완성 결과와 resolved-place 결과를 캐싱한다.
+- Google 검색 결과와 검색어-장소 관계를 MySQL에 학습 데이터로 저장한다.
+- 학습 데이터 변경 시 Redis 검색 세대를 증가시켜 이전 캐시를 무효화한다.
 - 유료 승인된 소유 계획표에 한해 Google 장소 검색을 제공한다.
 - 유료 승인된 소유 계획표에 한해 Google Maps 브라우저 API 키를 제공한다.
 
@@ -279,6 +291,10 @@ wss://{host}/ws/plans/{planId}
 | `PlaceController` | 장소 자동완성, Google 장소 검색, Google Maps 키 API 제공 |
 | `PlaceAutocompleteService` | Nominatim 검색, 결과 정렬, Redis 캐시 처리 |
 | `GooglePlaceSearchService` | Google Places Text Search API 호출 |
+| `PlaceMemoryService` | Google 발견·장소 선택 신호 저장과 로컬 후보 조회 |
+| `PlaceRankingModel` | 문자열 일치, 선택 빈도, 최근성 기반 후보 점수 계산 |
+| `PlaceSearchCacheVersion` | Redis 검색 학습 generation 조회·증가 |
+| `PlaceSchemaInitializer` | 검색 학습 테이블 초기화 |
 | `NominatimClient` | Nominatim HTTP 호출 |
 | `QueryVariantBuilder` | 검색어 변형 생성 |
 | `Geo` | 좌표 정규화 |
@@ -290,7 +306,17 @@ wss://{host}/ws/plans/{planId}
 | --- | --- | --- |
 | `GET` | `/api/place/autocomplete?q={keyword}` | Nominatim 장소 자동완성 |
 | `GET` | `/api/place/google/search?q={keyword}&planId={planId}` | 유료 계획 Google 장소 검색 |
+| `GET` | `/api/place/google/access?planId={planId}` | Google 기능 승인 상태 조회 |
 | `GET` | `/api/place/google/maps-key?planId={planId}` | 유료 계획 Google Maps 키 조회 |
+| `POST` | `/api/place/selection` | 장소 선택 학습 신호 저장 |
+
+### 검색 학습 모델
+
+| 저장 대상 | 역할 |
+| --- | --- |
+| `place_memory` | 로컬 검색이 반환할 장소 본문, 다국어명, 좌표, 누적 선택 수 |
+| `place_search_learning` | 국가·검색어·장소별 발견 수, 선택 수, 최근 시각 |
+| Redis generation | 학습 변경 후 이전 autocomplete/resolved 캐시의 논리적 무효화 |
 
 ## 4.7 경로 최적화 모듈
 
@@ -412,6 +438,9 @@ wss://{host}/ws/plans/{planId}
 | `app/createplan/page.tsx` | `/createplan` | 계획 생성 진입 화면 |
 | `app/createplan/[createid]/page.tsx` | `/createplan/{createid}` | 계획표 상세 편집 화면 |
 | `app/mypage/page.tsx` | `/mypage` | 내 계획 및 참여 계획 목록 |
+| `app/community/page.tsx` | `/community` | 피드·Q&A 커뮤니티 |
+| `app/community/me/page.tsx` | `/community/me` | 내 커뮤니티 게시물 |
+| `app/community/plans/[postId]/page.tsx` | `/community/plans/{postId}` | 공유 계획 상세 |
 | `app/admin/payments/page.tsx` | `/admin/payments` | 관리자 결제 승인 화면 |
 | `app/admin/server-test/page.tsx` | `/admin/server-test` | 관리자 서버 테스트 화면 |
 
@@ -425,7 +454,7 @@ wss://{host}/ws/plans/{planId}
 
 - 홈 화면의 주요 콘텐츠와 추천 여행지 UI를 제공한다.
 - 계획 생성 모달을 제공한다.
-- 기본형/엑셀형 템플릿 선택을 제공한다.
+- 기본형/테이블형 템플릿 선택을 제공한다.
 - 무료/유료 버전 선택을 제공한다.
 - 유료 결제 요청 입력 폼을 제공한다.
 - 초대 링크 또는 계획 ID로 계획 참여를 검증하고 이동한다.
@@ -450,7 +479,7 @@ wss://{host}/ws/plans/{planId}
 
 - 여행 계획표 편집 화면의 전체 상태를 관리한다.
 - 계획 로딩, 저장, 자동 저장, WebSocket 동기화를 처리한다.
-- 체크리스트, 기본형 일정표, 엑셀형 일정표, 참여자, 경로 계산 패널을 통합한다.
+- 체크리스트, 기본형 일정표, 테이블형 일정표, 참여자, 경로 계산 패널을 통합한다.
 - 무료/유료 tier에 따라 장소 검색과 경로 노드 제한을 적용한다.
 
 ### 주요 컴포넌트
@@ -459,7 +488,7 @@ wss://{host}/ws/plans/{planId}
 | --- | --- |
 | `HeroSection` | 계획 편집 상태, 저장, 자동 저장, 실시간 동기화 관리 |
 | `TravelCheckList` | 여행 전 준비물과 경비 관리 |
-| `TravelItinerary` | 기본형/엑셀형 일정표 UI 제공 |
+| `TravelItinerary` | 기본형/테이블형 일정표 UI 제공 |
 | `DayCard` | 기본형 Day 단위 편집 |
 | `ActivityRow` | 기본형 일정 항목 편집 |
 | `SortableDayCard` | Day 드래그 정렬 |
@@ -469,6 +498,44 @@ wss://{host}/ws/plans/{planId}
 | `MapRoutePanel` | 지도, 주변 정류장, 경로 최적화, 경로 비교 |
 | `ParticipantsSidebar` | 참여자 목록, 추가, 삭제, 권한 변경, 초대 링크 복사 |
 | `SaveSection` | 수동 저장 및 마지막 저장 정보 표시 |
+
+테이블형은 열 너비·행 높이 조절, 00:00~24:00 직접 입력, 장소 연결 셀 강조, 열 단위 장소검색 안내 제거, 전용 비용 계산을 제공한다.
+
+## 5.4 커뮤니티 모듈
+
+### 경로
+
+- `frontend/app/community`
+- `frontend/lib/community.ts`
+- `com.infp.community`
+
+### 책임
+
+- 계획·사진 피드와 Q&A를 게시물 유형으로 분리한다.
+- Q&A 전용 작성 폼, 카드, 답변, 저장 동작을 제공한다.
+- 이미지와 5분 미만 동영상을 로컬 저장소에 업로드한다.
+- 게시물 반응, 저장, 댓글/답변, 공유 계획 복사를 처리한다.
+- 답변 좋아요를 영속 저장하고 Q&A 답변을 추천순으로 정렬한다.
+
+### 주요 백엔드 클래스
+
+| 클래스 | 책임 |
+| --- | --- |
+| `CommunityController` | 게시물·미디어·반응·답변 REST API |
+| `CommunityService` | 게시물 유형 정규화, 권한, 미디어 메타데이터 동기화 |
+| `CommunityMediaStorageService` | MIME·크기·영상 길이 검사와 로컬 파일 저장 |
+| `CommunityPostMediaEntity` | 로컬/CDN URL과 파일 메타데이터 저장 |
+
+### 주요 API
+
+| Method | URL | 설명 |
+| --- | --- | --- |
+| `GET/POST` | `/api/community/posts` | 게시물 목록·작성 |
+| `PUT/DELETE` | `/api/community/posts/{postId}` | 게시물 수정·삭제 |
+| `POST` | `/api/community/posts/media` | Q&A 이미지·동영상 업로드 |
+| `POST` | `/api/community/posts/{postId}/save` | 피드 저장 또는 Q&A `나도 알고싶어요` |
+| `GET/POST` | `/api/community/posts/{postId}/comments` | 댓글·Q&A 답변 조회/작성 |
+| `POST` | `/api/community/posts/{postId}/comments/{commentId}/like` | 답변 좋아요 토글 |
 
 ### 주요 상태 모델
 
@@ -510,7 +577,7 @@ type ItineraryActivity = {
 };
 ```
 
-## 5.4 마이페이지 모듈
+## 5.5 마이페이지 모듈
 
 ### 경로
 
@@ -524,7 +591,7 @@ type ItineraryActivity = {
 - 계획표별 템플릿 유형, 요금 상태, 참여자 수를 표시한다.
 - 내가 만든 계획표 삭제 기능을 제공한다.
 
-## 5.5 인증 상태 모듈
+## 5.6 인증 상태 모듈
 
 ### 경로
 
@@ -538,7 +605,7 @@ type ItineraryActivity = {
 - 보호 페이지 접근 시 비로그인 사용자를 로그인 페이지로 이동시킨다.
 - 로그아웃 요청 후 클라이언트 인증 상태를 초기화한다.
 
-## 5.6 API 클라이언트 모듈
+## 5.7 API 클라이언트 모듈
 
 ### 경로
 
@@ -554,7 +621,7 @@ type ItineraryActivity = {
 - 결제 요청 API 호출을 래핑한다.
 - Google Maps 스크립트 로딩과 API 키 조회를 처리한다.
 
-## 5.7 테마 모듈
+## 5.8 테마 모듈
 
 ### 경로
 
@@ -572,7 +639,7 @@ type ItineraryActivity = {
 
 ### 책임
 
-- 사용자 계정, 인증 토큰 해시, 여행 계획, 참여자, 엑셀형 셀, 결제 요청 데이터를 영속 저장한다.
+- 사용자 계정, 인증 토큰 해시, 여행 계획, 참여자, 테이블형 셀, 결제 요청 데이터를 영속 저장한다.
 
 ### 주요 테이블
 
@@ -583,7 +650,7 @@ type ItineraryActivity = {
 | `plan_members` | 계획 참여자와 권한 |
 | `plan_days` | 기본형 일정 Day 정규화 테이블 |
 | `plan_items` | 기본형 일정 항목 정규화 테이블 |
-| `plan_spreadsheet_cells` | 엑셀형 셀 정규화 테이블 |
+| `plan_spreadsheet_cells` | 테이블형 셀 정규화 테이블 |
 | `plan_checklist_items` | 체크리스트 정규화 테이블 |
 | `payment_requests` | 유료 결제 요청 |
 | `places` | 장소 마스터 데이터 |
@@ -648,7 +715,7 @@ type ItineraryActivity = {
 1. 사용자가 Create 버튼을 누른다.
 2. 사용자가 제목, 템플릿, 요금제를 선택한다.
 3. 프론트엔드가 `plan-{uuid}` 형태의 external id를 생성한다.
-4. 프론트엔드가 기본형 또는 엑셀형 초기 `TravelPlanDraft`를 생성한다.
+4. 프론트엔드가 기본형 또는 테이블형 초기 `TravelPlanDraft`를 생성한다.
 5. 로그인 사용자 정보를 OWNER 참여자로 포함한다.
 6. 프론트엔드가 `/api/travel-plans/{id}`로 저장 요청을 보낸다.
 7. 백엔드는 `plans`에 메타데이터와 JSON 스냅샷을 저장한다.

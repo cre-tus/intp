@@ -6,7 +6,8 @@ import ActivityField from "@/components/planner/ActivityField/ActivityField";
 import CostField from "@/components/planner/ActivityField/CostField";
 import DeleteButton from "@/components/planner/ActivityField/DeleteButton";
 import PlaceSearchModal from "@/components/planner/ActivityField/PlaceSerachModal";
-import type { PlaceSearchOrigin } from "@/components/planner/ActivityField/PlaceSerachInput";
+import type { PlaceResult, PlaceSearchOrigin } from "@/components/planner/ActivityField/PlaceSerachInput";
+import type { TravelCountryCode, TravelPlanTier } from "@/lib/travelPlans";
 import { Pin, ChevronUp, ChevronDown } from "lucide-react";
 
 type ActivityError = { message: string } | null;
@@ -30,10 +31,16 @@ export default function ActivityRow(props: {
     onClearTimeError: (activityId: string) => void;
     dragHandleProps?: DragHandleProps;
     paidPlaces?: boolean;
+    tier?: TravelPlanTier;
     planId?: string;
+    planTitle?: string;
+    countryCode?: TravelCountryCode;
     searchOrigin?: PlaceSearchOrigin | null;
+    onUpgradeRequested?: () => void;
+    onTierSynced?: (tier: TravelPlanTier) => void;
     onReorderActivities?: (dayId: string, oldIndex: number, newIndex: number) => void;
     totalActivities?: number;
+    knownPlaces?: PlaceResult[];
 }) {
     const { activity, index, error } = props;
     const [placeOpen, setPlaceOpen] = useState(false);
@@ -175,11 +182,19 @@ export default function ActivityRow(props: {
                 open={placeOpen}
                 onClose={() => setPlaceOpen(false)}
                 initialQuery={activity.location}
+                initialLat={activity.lat}
+                initialLon={activity.lon}
                 paidPlaces={props.paidPlaces}
+                tier={props.tier}
                 planId={props.planId}
+                planTitle={props.planTitle}
+                countryCode={props.countryCode}
                 origin={props.searchOrigin}
+                knownPlaces={props.knownPlaces}
+                onUpgradeRequested={props.onUpgradeRequested}
+                onTierSynced={props.onTierSynced}
                 onSelect={(place) => {
-                    props.onChangeField("location", place.title);
+                    props.onChangeField("location", place.displayTitle?.trim() || place.title);
                     props.onChangeField("placeId", place.id);
                     props.onChangeField("placeSubtitle", place.subtitle);
                     props.onChangeField("lat", place.lat);

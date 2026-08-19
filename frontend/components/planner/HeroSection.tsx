@@ -7,7 +7,7 @@ import TravelCheckList, { ChecklistItem } from "@/components/planner/TravelCheck
 import TravelItinerary, { ItineraryDay, SelectedCostCell } from "@/components/planner/TravelItinerary";
 import ParticipantsSidebar, { Participant } from "@/components/planner/ParticipantsSidebar";
 import MapRoutePanel from "@/components/planner/MapRoutePanel";
-import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
+import { DEFAULT_CURRENCY, STORED_JPY_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 import { Calculator, CalendarDays, Redo2, Route, Undo2, X } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import {
@@ -84,6 +84,7 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
     const [selectedCurrency, setSelectedCurrency] = useState<CurrencyRate>(DEFAULT_CURRENCY);
     const [routeModalOpen, setRouteModalOpen] = useState(false);
     const [routeDayId, setRouteDayId] = useState(initialPlan.days[0]?.id ?? "");
+    const [paymentTier, setPaymentTier] = useState<TravelPlanDraft["tier"]>(initialPlan.tier ?? "FREE");
     const [lastSavedAt, setLastSavedAt] = useState(initialPlan.updatedAt);
     const [lastEditorName, setLastEditorName] = useState("사용자");
     const [lastEditorEmail, setLastEditorEmail] = useState("");
@@ -130,6 +131,8 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                 setChecklist(next.checklist);
                 setParticipants(next.participants);
                 setDays(next.days);
+                setSelectedCurrency(next.costCurrency === "JPY" ? STORED_JPY_CURRENCY : DEFAULT_CURRENCY);
+                setPaymentTier(next.tier ?? "FREE");
                 resetDaysHistory();
                 setRouteDayId(next.days[0]?.id ?? "");
                 setLastSavedAt(next.updatedAt);
@@ -203,13 +206,14 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         title,
         template: initialPlan.template ?? "basic",
         tier: initialPlan.tier ?? "FREE",
+        costCurrency: selectedCurrency.unit === "JPY" ? "JPY" : initialPlan.costCurrency,
         tripContext: initialPlan.tripContext,
         checklist,
         participants,
         days,
         createdAt: initialPlan.createdAt,
         updatedAt: new Date().toISOString(),
-    }), [checklist, days, initialPlan.createdAt, initialPlan.template, initialPlan.tier, initialPlan.tripContext, participants, planId, title]);
+    }), [checklist, days, initialPlan.costCurrency, initialPlan.createdAt, initialPlan.template, initialPlan.tier, initialPlan.tripContext, participants, planId, selectedCurrency.unit, title]);
 
     useEffect(() => {
         draftRef.current = draft;
@@ -658,6 +662,81 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
         commitRealtimeSync(nextDraft);
     }, [commitRealtimeSync, draft]);
 
+    const syncPlanTier = useCallback((tier: TravelPlanDraft["tier"]) => {
+        setPaymentTier(tier);
+        return;
+        /*
+        const currentPlan = draftRef.current ?? initialPlan;
+        const resolvedTier = resolveTravelPlanTier(currentPlan.tier, tier);
+        if (resolvedTier === currentPlan.tier) return;
+
+        const updatedAt = new Date().toISOString();
+        const nextPlan = { ...currentPlan, tier: resolvedTier, updatedAt };
+        draftRef.current = nextPlan;
+        mergeBaseRef.current = nextPlan;
+        dirtyRef.current = true;
+        setInitialPlan((current) => ({ ...current, tier: resolvedTier, updatedAt }));
+        void saveTravelPlan(nextPlan)
+            .then((persisted) => {
+                draftRef.current = persisted;
+                mergeBaseRef.current = persisted;
+                setInitialPlan(persisted);
+                dirtyRef.current = false;
+            })
+            .catch(() => {
+                dirtyRef.current = true;
+                setSyncStatus("권한 상태 저장 실패");
+            });
+        */
+    }, []);
+
+    const markPlanTierPending = useCallback(() => {
+        syncPlanTier("PENDING_PAID");
+    }, [syncPlanTier]);
+
+    useEffect(() => {
+        if (isLoggedIn !== true || !planId || planId === "default") return;
+
+        let alive = true;
+        const refreshPaymentTierFromDb = async () => {
+            try {
+                const response = await fetch(`/api/place/google/access?planId=${encodeURIComponent(planId)}`, {
+                    cache: "no-store",
+                    credentials: "include",
+                });
+                if (!response.ok) return;
+                const data = await response.json() as { tier?: TravelPlanDraft["tier"] };
+                if (!alive || !data.tier) return;
+                const nextTier = data.tier;
+                setPaymentTier((current) => {
+                    if (current === nextTier) return current;
+                    if (nextTier === "PAID") setSyncStatus("유료 권한 승인됨");
+                    return nextTier;
+                });
+                if (nextTier === "PAID") {
+                    setInitialPlan((current) => current.tier === "PAID" ? current : { ...current, tier: "PAID" });
+                }
+                return;
+                if (alive && data.tier === "PAID") {
+                    syncPlanTier("PAID");
+                    setSyncStatus("유료 권한 승인됨");
+                }
+            } catch {
+                // 열린 계획 화면에서는 다음 폴링에서 다시 확인한다.
+            }
+        };
+
+        void refreshPaymentTierFromDb();
+        const timer = window.setInterval(() => {
+            void refreshPaymentTierFromDb();
+        }, 5000);
+
+        return () => {
+            alive = false;
+            window.clearInterval(timer);
+        };
+    }, [isLoggedIn, planId, syncPlanTier]);
+
     const inviteUrl = typeof window === "undefined"
         ? ""
         : `${window.location.origin}/createplan/${planId}`;
@@ -788,20 +867,19 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                 days={days}
                                 setDays={setDaysSynced}
                                 template={draft.template}
-                                tier={draft.tier}
+                                tier={paymentTier}
                                 planId={planId}
                                 countryCode={draft.tripContext.countryCode}
                                 currency={selectedCurrency}
                                 onCostSelectionChange={setSelectedCostCells}
+                                onTierPending={markPlanTierPending}
+                                onTierSynced={syncPlanTier}
                             />
                         </div>
-                        {draft.template === "spreadsheet" && (
-                            <CurrencyAwareSpreadsheetCostCalculator selectedCells={selectedCostCells} currency={selectedCurrency} />
-                        )}
                     </div>
 
                     <div
-                        className="w-full shrink-0 rounded-xl border-2 transition-colors lg:w-80 xl:w-96"
+                        className="w-full shrink-0 rounded-xl border-2 transition-colors lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:self-start lg:overflow-hidden lg:w-80 xl:w-96"
                         style={editingFrameStyle("participants")}
                         onFocusCapture={() => broadcastPresence("participants")}
                         onBlurCapture={() => broadcastPresence("participants", "PRESENCE_CLEAR")}
@@ -831,6 +909,9 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                                     onOpen={() => setRouteModalOpen(true)}
                                 />
                             )}
+                            costCalculator={draft.template === "spreadsheet" ? (
+                                <CurrencyAwareSpreadsheetCostCalculator selectedCells={selectedCostCells} currency={selectedCurrency} />
+                            ) : undefined}
                         />
                     </div>
                 </div>
@@ -884,9 +965,9 @@ export default function HeroSection({ createId, allowCreate = false }: { createI
                         <div className="min-h-0 overflow-auto">
                             <MapRoutePanel
                                 days={days}
-                                maxNodes={travelPlanNodeLimit(draft)}
+                                maxNodes={travelPlanNodeLimit({ tier: paymentTier })}
                                 initialSelectedDayId={selectedRouteDayId}
-                                paidMaps={draft.tier === "PAID"}
+                                paidMaps={paymentTier === "PAID"}
                                 planId={planId}
                                 isAdmin={isAdmin}
                                 forcedOpen
@@ -1021,7 +1102,7 @@ function SpreadsheetCostCalculator({
             </div>
 
             <p className="rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-800">
-                엑셀형 템플릿의 초록색 셀을 클릭, Ctrl/Command 클릭, 드래그로 선택한 뒤 계산하세요.
+                테이블형 템플릿의 초록색 셀을 클릭, Ctrl/Command 클릭, 드래그로 선택한 뒤 계산하세요.
             </p>
 
             <div className="rounded-lg bg-gray-50 p-3">

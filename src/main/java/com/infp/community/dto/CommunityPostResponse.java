@@ -5,6 +5,7 @@ import java.util.List;
 
 public record CommunityPostResponse(
         Long id,
+        String postType,
         String planId,
         Long authorId,
         String author,
@@ -16,7 +17,12 @@ public record CommunityPostResponse(
         String budget,
         String imageKey,
         String imageUrl,
+        String mediaType,
+        String mediaUrl,
         String caption,
+        String questionDetail,
+        String attempted,
+        String answerPreference,
         List<String> tags,
         List<String> route,
         long likes,

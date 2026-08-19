@@ -26,12 +26,23 @@ public class TravelPlanService {
     private final TravelPlanRepository repository;
     private final UserRepository userRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final MlTrainingPlanSnapshotService mlTrainingPlanSnapshotService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public TravelPlanService(TravelPlanRepository repository, UserRepository userRepository, JdbcTemplate jdbcTemplate) {
+    private final TravelPlanPlaceEnrichmentService travelPlanPlaceEnrichmentService;
+
+    public TravelPlanService(
+            TravelPlanRepository repository,
+            UserRepository userRepository,
+            JdbcTemplate jdbcTemplate,
+            MlTrainingPlanSnapshotService mlTrainingPlanSnapshotService,
+            TravelPlanPlaceEnrichmentService travelPlanPlaceEnrichmentService
+    ) {
         this.repository = repository;
         this.userRepository = userRepository;
         this.jdbcTemplate = jdbcTemplate;
+        this.mlTrainingPlanSnapshotService = mlTrainingPlanSnapshotService;
+        this.travelPlanPlaceEnrichmentService = travelPlanPlaceEnrichmentService;
     }
 
     public List<TravelPlanSummaryResponse> list(long userId) {
@@ -91,6 +102,7 @@ public class TravelPlanService {
 
         TravelPlanEntity saved = repository.saveAndFlush(copied);
         ensureOwnerMember(saved, userId);
+        mlTrainingPlanSnapshotService.captureIfEligible(saved);
         return toResponse(saved);
     }
 
@@ -136,11 +148,12 @@ public class TravelPlanService {
         } else {
             requireCanEdit(entity, owner);
         }
-        content = contentWithCanonicalOwner(content, entity.getOwner());
-
         entity.setTitle(requireText(request.title(), "제목이 필요합니다."));
         entity.setTemplate(normalizeTemplate(request.template()));
-        entity.setTier(blankToDefault(request.tier(), "FREE"));
+        entity.setTier(entity.getId() == null ? "FREE" : normalizeTier(entity.getTier()));
+        content = contentWithCanonicalOwner(content, entity.getOwner());
+        content = contentWithTier(content, entity.getTier());
+        content = travelPlanPlaceEnrichmentService.enrichAndSyncPlanPlaces(entity, content);
         entity.setContentJson(toJson(content));
         entity.setStartDate(firstDate(content));
         entity.setEndDate(lastDate(content, entity.getStartDate()));
@@ -149,6 +162,7 @@ public class TravelPlanService {
         ensureOwnerMember(saved, saved.getOwner().getId());
         syncPlanMembers(saved, content);
         syncSpreadsheetCells(saved, content);
+        mlTrainingPlanSnapshotService.captureIfEligible(saved);
         return toResponse(saved);
     }
 
@@ -239,7 +253,7 @@ public class TravelPlanService {
     @Transactional
     public void updateTier(String externalId, String tier) {
         repository.findByExternalId(externalId).ifPresent(entity -> {
-            entity.setTier(blankToDefault(tier, "FREE"));
+            entity.setTier(resolveTierForSave(entity.getTier(), tier, false));
             try {
                 JsonNode content = parseJson(entity.getContentJson());
                 if (content instanceof ObjectNode objectNode) {
@@ -258,6 +272,12 @@ public class TravelPlanService {
         if (!"PAID".equals(entity.getTier())) {
             throw new IllegalArgumentException("유료 템플릿에서만 Google 장소 검색을 사용할 수 있습니다.");
         }
+    }
+
+    public String googlePlaceTier(String externalId, long userId) {
+        TravelPlanEntity entity = requirePlan(externalId);
+        requireCanView(entity, userId);
+        return normalizeTier(entity.getTier());
     }
 
     private TravelPlanEntity requirePlan(String externalId) {
@@ -365,6 +385,13 @@ public class TravelPlanService {
             participants.add(ownerNode);
         }
         return objectNode;
+    }
+
+    private JsonNode contentWithTier(JsonNode content, String tier) {
+        if (content instanceof ObjectNode objectNode) {
+            objectNode.put("tier", normalizeTier(tier));
+        }
+        return content;
     }
 
     private JsonNode contentWithParticipantRole(TravelPlanEntity entity, User target, String role) {
@@ -582,7 +609,7 @@ public class TravelPlanService {
     }
 
     private TravelPlanResponse toResponse(TravelPlanEntity entity) {
-        JsonNode content = contentWithCanonicalOwner(parseJson(entity.getContentJson()), entity.getOwner());
+        JsonNode content = contentWithTier(contentWithCanonicalOwner(parseJson(entity.getContentJson()), entity.getOwner()), entity.getTier());
         return new TravelPlanResponse(
                 entity.getExternalId(),
                 entity.getTitle(),
@@ -730,6 +757,27 @@ public class TravelPlanService {
     private static String normalizeTemplate(String value) {
         String template = blankToDefault(value, "basic");
         return List.of("basic", "spreadsheet", "timeline", "route_sheet").contains(template) ? template : "basic";
+    }
+
+    private static String resolveTierForSave(String currentTier, String requestedTier, boolean newPlan) {
+        String requested = normalizeTier(requestedTier);
+        if (newPlan) return requested;
+
+        String current = normalizeTier(currentTier);
+        return tierRank(requested) > tierRank(current) ? requested : current;
+    }
+
+    private static String normalizeTier(String value) {
+        String tier = blankToDefault(value, "FREE").toUpperCase(Locale.ROOT);
+        return List.of("FREE", "PENDING_PAID", "PAID").contains(tier) ? tier : "FREE";
+    }
+
+    private static int tierRank(String tier) {
+        return switch (normalizeTier(tier)) {
+            case "PAID" -> 2;
+            case "PENDING_PAID" -> 1;
+            default -> 0;
+        };
     }
 
     private static String normalizeRouteRole(String value) {

@@ -4,6 +4,7 @@ public record PlaceSelectionRequest(
         PlaceItem place,
         String query,
         String provider,
-        String planId
+        String planId,
+        String countryCode
 ) {
 }

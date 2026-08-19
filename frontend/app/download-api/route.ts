@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
                     "Content-Type": contentType,
                 },
             });
-        } catch (err) {
+        } catch {
             return new NextResponse("Failed to read file", { status: 500 });
         }
     }
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
 
         const fileList = Array.from(fileMap.values());
         return NextResponse.json(fileList);
-    } catch (err) {
+    } catch {
         return NextResponse.json({ error: "Failed to read directories" }, { status: 500 });
     }
 }

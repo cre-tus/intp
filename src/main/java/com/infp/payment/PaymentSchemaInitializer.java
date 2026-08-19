@@ -14,7 +14,7 @@ public class PaymentSchemaInitializer {
     }
 
     @PostConstruct
-    public void ensureDepositBankColumn() {
+    public void ensurePaymentSchema() {
         Integer count = jdbcTemplate.queryForObject("""
                         SELECT COUNT(*)
                         FROM INFORMATION_SCHEMA.COLUMNS
@@ -24,12 +24,37 @@ public class PaymentSchemaInitializer {
                         """,
                 Integer.class
         );
-        if (count != null && count > 0) return;
+        if (count == null || count == 0) {
+            jdbcTemplate.execute("""
+                    ALTER TABLE payment_requests
+                    ADD COLUMN deposit_bank VARCHAR(100) NOT NULL DEFAULT '' COMMENT '입금 은행명'
+                    AFTER depositor_name
+                    """);
+        }
+        backfillPlanTiersFromPaymentRequests();
+    }
 
-        jdbcTemplate.execute("""
-                ALTER TABLE payment_requests
-                ADD COLUMN deposit_bank VARCHAR(100) NOT NULL DEFAULT '' COMMENT '입금 은행명'
-                AFTER depositor_name
+    private void backfillPlanTiersFromPaymentRequests() {
+        jdbcTemplate.update("""
+                UPDATE plans p
+                JOIN payment_requests pr ON pr.plan_id = p.external_id
+                SET p.tier = 'PAID',
+                    p.content_json = CASE
+                        WHEN JSON_VALID(p.content_json) THEN JSON_SET(p.content_json, '$.tier', 'PAID')
+                        ELSE p.content_json
+                    END
+                WHERE pr.status = 'APPROVED'
+                """);
+        jdbcTemplate.update("""
+                UPDATE plans p
+                JOIN payment_requests pr ON pr.plan_id = p.external_id
+                SET p.tier = 'PENDING_PAID',
+                    p.content_json = CASE
+                        WHEN JSON_VALID(p.content_json) THEN JSON_SET(p.content_json, '$.tier', 'PENDING_PAID')
+                        ELSE p.content_json
+                    END
+                WHERE pr.status = 'PENDING'
+                  AND p.tier <> 'PAID'
                 """);
     }
 }

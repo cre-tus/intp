@@ -1,7 +1,7 @@
 import type { ChecklistItem } from "@/components/planner/TravelCheckList";
 import type { ItineraryActivity, ItineraryDay } from "@/components/planner/TravelItinerary";
 import type { Participant } from "@/components/planner/ParticipantsSidebar";
-import type { TravelPlanDraft } from "@/lib/travelPlans";
+import { resolveTravelPlanTier, type TravelPlanDraft } from "@/lib/travelPlans";
 
 type Identified = { id: string | number };
 
@@ -14,7 +14,7 @@ export function mergeTravelPlans(
         ...remote,
         title: mergeValue(base.title, local.title, remote.title),
         template: mergeValue(base.template, local.template, remote.template),
-        tier: mergeValue(base.tier, local.tier, remote.tier),
+        tier: mergeTier(base.tier, local.tier, remote.tier),
         checklist: mergeChecklist(base.checklist, local.checklist, remote.checklist),
         participants: mergeParticipants(base.participants, local.participants, remote.participants),
         days: mergeDays(base.days, local.days, remote.days),
@@ -113,6 +113,14 @@ function mergeValue<T>(baseValue: T | undefined, localValue: T, remoteValue: T) 
     const remoteChanged = !same(baseValue, remoteValue);
     if (localChanged && !remoteChanged) return localValue;
     return remoteValue;
+}
+
+function mergeTier(
+    baseTier: TravelPlanDraft["tier"],
+    localTier: TravelPlanDraft["tier"],
+    remoteTier: TravelPlanDraft["tier"],
+) {
+    return resolveTravelPlanTier(mergeValue(baseTier, localTier, remoteTier), resolveTravelPlanTier(localTier, remoteTier));
 }
 
 function byId<T extends Identified>(items: T[]) {

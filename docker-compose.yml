@@ -3,13 +3,23 @@ services:
     image: mysql:8.0
     container_name: infp-mysql
     restart: unless-stopped
+    mem_limit: 640m
+    cpus: 1.0
+    command:
+      - --innodb-buffer-pool-size=256M
+      - --max-connections=20
+      - --table-open-cache=400
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Seoul
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./db/create.sql:/docker-entrypoint-initdb.d/create.sql
+      - ./db/create.sql:/docker-entrypoint-initdb.d/01_create.sql:ro
+      - ./db/community_create.sql:/docker-entrypoint-initdb.d/02_community.sql:ro
+      - ./db/follow_create.sql:/docker-entrypoint-initdb.d/03_follow.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
@@ -21,19 +31,26 @@ services:
     image: redis:7
     container_name: infp-redis
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru --save 900 1
 
   gtfs-postgis:
     image: postgis/postgis:16-3.4
     container_name: infp-gtfs-postgis
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    command: postgres -c shared_buffers=128MB -c work_mem=4MB -c maintenance_work_mem=64MB -c max_connections=20
     environment:
-      POSTGRES_DB: ${GTFS_POSTGRES_DB:-gtfs}
-      POSTGRES_USER: ${GTFS_POSTGRES_USER:-gtfs}
-      POSTGRES_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
+      POSTGRES_DB: ${GTFS_POSTGRES_DB:?GTFS_POSTGRES_DB must be set in .env}
+      POSTGRES_USER: ${GTFS_POSTGRES_USER:?GTFS_POSTGRES_USER must be set in .env}
+      POSTGRES_PASSWORD: ${GTFS_POSTGRES_PASSWORD:?GTFS_POSTGRES_PASSWORD must be set in .env}
       TZ: Asia/Seoul
     volumes:
       - gtfs_postgis_data:/var/lib/postgresql/data
       - ./db/postgis_create.sql:/docker-entrypoint-initdb.d/01_postgis_create.sql:ro
+      - ./db/postgis_place_catalog.sql:/docker-entrypoint-initdb.d/postgis_place_catalog.sql:ro
       - ./db/postgis_insert.sql:/docker-entrypoint-initdb.d/02_postgis_insert.sql:ro
       - ./db/gtfs/korea_national:/gtfs/active:ro
       - ./db/gtfs:/gtfs/all:ro
@@ -42,12 +59,16 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+    ports:
+      - "127.0.0.1:5433:5432"
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: infp-backend
     restart: unless-stopped
+    mem_limit: 768m
+    cpus: 2.0
     depends_on:
       mysql:
         condition: service_healthy
@@ -55,12 +76,13 @@ services:
         condition: service_started
       gtfs-postgis:
         condition: service_healthy
-      nominatim:
-        condition: service_started
       nominatim-jp:
         condition: service_started
+      ml-ingest:
+        condition: service_healthy
     environment:
       JWT_SECRET: ${JWT_SECRET}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=65 -XX:InitialRAMPercentage=20 -Dsun.net.inetaddr.ttl=5 -Dsun.net.inetaddr.negative.ttl=1
       SPRING_PROFILES_ACTIVE: docker
       DB_HOST: mysql
       DB_PORT: 3306
@@ -71,20 +93,122 @@ services:
       REDIS_PORT: 6379
       GTFS_DB_HOST: gtfs-postgis
       GTFS_DB_PORT: 5432
-      GTFS_DB_NAME: ${GTFS_POSTGRES_DB:-gtfs}
-      GTFS_DB_USER: ${GTFS_POSTGRES_USER:-gtfs}
-      GTFS_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:-gtfs}
+      GTFS_DB_NAME: ${GTFS_POSTGRES_DB:?GTFS_POSTGRES_DB must be set in .env}
+      GTFS_DB_USER: ${GTFS_POSTGRES_USER:?GTFS_POSTGRES_USER must be set in .env}
+      GTFS_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:?GTFS_POSTGRES_PASSWORD must be set in .env}
       GOOGLE_MAP_API: ${GOOGLE_MAP_API:-}
       GOOGLE_PRIVATE_API: ${GOOGLE_PRIVATE_API:-}
+      PLACE_TRANSLATION_ENABLED: ${PLACE_TRANSLATION_ENABLED:-true}
+      PLACE_TRANSLATION_BASE_URL: ${PLACE_TRANSLATION_BASE_URL:-http://libretranslate:5000}
+      PHOTON_ENABLED: ${PHOTON_ENABLED:-true}
+      PHOTON_BASE_URL: ${PHOTON_BASE_URL:-http://photon:2322}
+      ML_INGEST_BASE_URL: http://ml-ingest:8092
       GTFS_DATASET_DIRS: /app/db/gtfs/korea_national,/app/db/gtfs/tokyo_rail
       GTFS_LOAD_ROUTE_NAMES: ${GTFS_LOAD_ROUTE_NAMES:-false}
       TZ: Asia/Seoul
     volumes:
       - ./db/gtfs:/app/db/gtfs:ro
+      - ./uploads:/app/uploads
+
+  ml-ingest:
+    build:
+      context: .
+      dockerfile: docker/ml-ingest/Dockerfile
+    image: infp-ml-ingest
+    container_name: infp-ml-ingest
+    restart: unless-stopped
+    mem_limit: 3g
+    cpus: 2.0
+    working_dir: /app
+    command: python -u ml/recommender/admin_ingest_server.py
+    depends_on:
+      nominatim-jp:
+        condition: service_started
+    environment:
+      OLLAMA_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3-vl:8b-instruct}
+      PHI3_MODEL: ${PHI3_MODEL:-phi3:mini}
+      PADDLEOCR_LANG: ${PADDLEOCR_LANG:-korean}
+      FLAGS_paddle_num_threads: ${PADDLEOCR_THREADS:-2}
+      OLLAMA_NUM_GPU: ${OLLAMA_NUM_GPU:--1}
+      OLLAMA_NUM_THREAD: ${OLLAMA_NUM_THREAD:-2}
+      OLLAMA_JSON_DAYS_PER_CHUNK: ${OLLAMA_JSON_DAYS_PER_CHUNK:-2}
+      OLLAMA_OCR_COLUMNS_PER_CALL: ${OLLAMA_OCR_COLUMNS_PER_CALL:-1}
+      OLLAMA_SEARCH_REPAIR_BATCH: ${OLLAMA_SEARCH_REPAIR_BATCH:-8}
+      NOMINATIM_URL: http://nominatim-jp:8080
+      CUSTOM_PLACE_URL: http://backend:8080/api/place/memory/custom
+      PHOTON_URL: http://photon:2322
+      LOCAL_TRANSLATION_URL: http://libretranslate:5000
+      GOOGLE_PRIVATE_API: ${GOOGLE_PRIVATE_API:-}
+      TRIP_IMAGE_MAX_GOOGLE_CALLS: ${TRIP_IMAGE_MAX_GOOGLE_CALLS:-8}
+      TRIP_IMAGE_GOOGLE_DELAY: ${TRIP_IMAGE_GOOGLE_DELAY:-0.25}
+      GOOGLE_PLACES_API_VERSION: ${GOOGLE_PLACES_API_VERSION:-legacy}
+      TZ: Asia/Seoul
+    volumes:
+      - ./ml/recommender:/app/ml/recommender
+      - paddleocr_models:/root/.paddleocr
+      - paddlex_models:/root/.paddlex
+    ports:
+      - "127.0.0.1:8092:8092"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8092/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  ml-recommender:
+    build:
+      context: .
+      dockerfile: docker/ml-recommender/Dockerfile
+    image: infp-ml-recommender
+    container_name: infp-ml-recommender
+    restart: unless-stopped
+    gpus: all
+    mem_limit: 2g
+    cpus: 2.0
+    working_dir: /app
+    command: python -u ml/recommender/serve.py --host 0.0.0.0 --port 8091 --model-dir ml/recommender/artifacts/reviewed_plan_intersection --catalog-mode reviewed_plan_intersection
+    depends_on:
+      mysql:
+        condition: service_healthy
+      gtfs-postgis:
+        condition: service_healthy
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      OMP_NUM_THREADS: ${ML_RECOMMENDER_THREADS:-2}
+      MKL_NUM_THREADS: ${ML_RECOMMENDER_THREADS:-2}
+      GTFS_DATASET_DIR: /app/db/gtfs/tokyo_rail
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      PLACE_DB_HOST: gtfs-postgis
+      PLACE_DB_PORT: 5432
+      PLACE_DB_NAME: ${GTFS_POSTGRES_DB:?GTFS_POSTGRES_DB must be set in .env}
+      PLACE_DB_USER: ${GTFS_POSTGRES_USER:?GTFS_POSTGRES_USER must be set in .env}
+      PLACE_DB_PASSWORD: ${GTFS_POSTGRES_PASSWORD:?GTFS_POSTGRES_PASSWORD must be set in .env}
+      ML_TRAIN_TOKEN: ${JWT_SECRET}
+    volumes:
+      - ./ml/recommender:/app/ml/recommender:ro
+      - ./ml/recommender/artifacts:/app/ml/recommender/artifacts
+      - ./scripts:/app/scripts:ro
+      - ./db/postgis_place_catalog.sql:/app/db/postgis_place_catalog.sql:ro
+      - ./db/gtfs:/app/db/gtfs:ro
+    ports:
+      - "127.0.0.1:8091:8091"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
   frontend:
     image: node:20-alpine
     container_name: infp-frontend
     restart: unless-stopped
+    mem_limit: 1g
+    cpus: 2.0
     working_dir: /app
     environment:
       NODE_ENV: development
@@ -92,6 +216,11 @@ services:
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
       EXCHANGE_RATE_API: ${EXCHANGE_RATE_API}
+      ML_RECOMMENDER_URL: ${ML_RECOMMENDER_URL:-http://ml-recommender:8091}
+      ML_TRAIN_TOKEN: ${JWT_SECRET}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_TEXT_MODEL: ${OLLAMA_TEXT_MODEL:-qwen3-vl:8b-instruct}
+      OLLAMA_NUM_THREAD: ${OLLAMA_NUM_THREAD:-2}
       TZ: Asia/Seoul
     command: sh -c "npm install && npm run dev -- -H 0.0.0.0 --webpack"
     volumes:
@@ -99,11 +228,15 @@ services:
       - frontend_node_modules:/app/node_modules
       - frontend_next:/app/.next
       - ./result:/result
+      - ./ml/recommender/seeds:/ml/recommender/seeds:ro
 
   nginx:
     image: nginx:alpine
     container_name: infp-nginx
     restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.5
+    command: /bin/sh -c 'while :; do sleep 6h; nginx -s reload; done & exec nginx -g "daemon off;"'
     depends_on:
       - frontend
       - backend
@@ -119,6 +252,11 @@ services:
   certbot:
     image: certbot/certbot
     container_name: infp-certbot
+    restart: unless-stopped
+    mem_limit: 64m
+    cpus: 0.25
+    entrypoint: /bin/sh
+    command: -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h; done'
     volumes:
       - ./certbot/www:/var/www/certbot
       - ./certbot/conf:/etc/letsencrypt
@@ -127,35 +265,102 @@ services:
     image: maptiler/tileserver-gl:latest
     container_name: infp-tileserver
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 1.0
     volumes:
       - ./tiles:/data
     command: ["--port", "8080"]
 
   nominatim:
+    profiles: ["korea"]
     image: mediagis/nominatim:4.4
     container_name: nominatim
     restart: unless-stopped
+    mem_limit: 1536m
+    cpus: 1.0
     environment:
       PBF_PATH: /data/south-korea-latest.osm.pbf
-      THREADS: 16
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 128MB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 64MB
+      POSTGRES_WORK_MEM: 4MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
+      THREADS: 1
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
     volumes:
       - ./nominatim/pbf:/data
       - nominatim_data:/var/lib/postgresql/14/main
-    shm_size: 4gb
+    shm_size: 256mb
 
   nominatim-jp:
     image: mediagis/nominatim:4.4
     container_name: nominatim-jp
     restart: unless-stopped
+    mem_limit: 3g
+    cpus: 1.5
     environment:
-      PBF_PATH: /data/kanto-260209.osm.pbf
-      THREADS: 16
+      PBF_PATH: /data/japan-latest.osm.pbf
+      REPLICATION_URL: https://download.geofabrik.de/asia/japan-updates/
+      REPLICATION_UPDATE_INTERVAL: 86400
+      REPLICATION_RECHECK_INTERVAL: 900
+      UPDATE_MODE: continuous
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 256MB
+      POSTGRES_AUTOVACUUM_WORK_MEM: 64MB
+      POSTGRES_WORK_MEM: 4MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 2GB
+      THREADS: 1
       NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD}
     volumes:
       - ./nominatim/pbf:/data
       - nominatim_jp_data:/var/lib/postgresql/14/main
-    shm_size: 4gb
+    shm_size: 256mb
+
+  photon:
+    profiles: ["photon"]
+    build:
+      context: .
+      dockerfile: docker/photon/Dockerfile
+      args:
+        PHOTON_VERSION: ${PHOTON_VERSION:-1.2.1}
+    container_name: infp-photon
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1.0
+    environment:
+      JAVA_OPTS: ${PHOTON_JAVA_OPTS:--Xms128m -Xmx512m}
+      PHOTON_DB_URL: ${PHOTON_DB_URL:-https://download1.graphhopper.com/public/asia/japan/photon-db-japan-1.0-latest.tar.bz2}
+    volumes:
+      - ./data/photon:/data
+    ports:
+      - "127.0.0.1:2322:2322"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:2322/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 10m
+
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: infp-libretranslate
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+    environment:
+      LT_LOAD_ONLY: en,ja,ko
+      LT_DISABLE_WEB_UI: "true"
+      LT_THREADS: 1
+    volumes:
+      - libretranslate_data:/home/libretranslate/.local
+    ports:
+      - "127.0.0.1:5000:5000"
+    healthcheck:
+      test: ["CMD", "./venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/languages', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 10m
 
 volumes:
   mysql_data:
@@ -164,3 +369,6 @@ volumes:
   nominatim_jp_data:
   frontend_node_modules:
   frontend_next:
+  libretranslate_data:
+  paddleocr_models:
+  paddlex_models:

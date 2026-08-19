@@ -187,3 +187,4 @@ AS $$
            + split_part(value, ':', 3)::integer
     END;
 $$;
+\ir /docker-entrypoint-initdb.d/postgis_place_catalog.sql

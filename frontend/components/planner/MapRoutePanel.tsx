@@ -346,14 +346,6 @@ export default function MapRoutePanel({
             layersRef.current.push(marker);
         });
 
-        routeOrder.forEach((point) => {
-            const stop = nearestStopsByPointId[point.id];
-            if (!stop) return;
-            const marker = L.marker([stop.lat, stop.lon]).addTo(map);
-            marker.bindPopup?.(`<strong>${escapeHtml(stop.name)}</strong><br/>${stop.distanceMeters}m`);
-            layersRef.current.push(marker);
-        });
-
         if (routeOrder.length >= 2) {
             const routeLatLngs: LatLngTuple[] = routeOrder.map((point) => [point.lat, point.lon]);
             if (optimized) {
@@ -391,7 +383,7 @@ export default function MapRoutePanel({
         } else if (routeOrder.length === 1) {
             map.setView([routeOrder[0].lat, routeOrder[0].lon], 14);
         }
-    }, [googleMapEnabled, leafletReady, nearestStopsByPointId, optimized, selectedPoints]);
+    }, [googleMapEnabled, leafletReady, optimized, selectedPoints]);
 
     useEffect(() => {
         if (!googleMapEnabled || !googleReady || !googleMapRef.current || !planId) return;
@@ -424,22 +416,6 @@ export default function MapRoutePanel({
                     marker.addListener("click", () => infoWindow.open({ map, anchor: marker }));
                     googleOverlaysRef.current.push(marker);
                     bounds.extend({ lat: point.lat, lng: point.lon });
-                });
-
-                routeOrder.forEach((point) => {
-                    const stop = nearestStopsByPointId[point.id];
-                    if (!stop) return;
-                    const marker = new googleMaps.Marker({
-                        map,
-                        position: { lat: stop.lat, lng: stop.lon },
-                        title: stop.name,
-                    });
-                    const infoWindow = new googleMaps.InfoWindow({
-                        content: `<strong>${escapeHtml(stop.name)}</strong><br/>${stop.distanceMeters}m`,
-                    });
-                    marker.addListener("click", () => infoWindow.open({ map, anchor: marker }));
-                    googleOverlaysRef.current.push(marker);
-                    bounds.extend({ lat: stop.lat, lng: stop.lon });
                 });
 
                 if (routeOrder.length >= 2) {
@@ -479,7 +455,7 @@ export default function MapRoutePanel({
         return () => {
             cancelled = true;
         };
-    }, [googleMapEnabled, googleReady, nearestStopsByPointId, optimized, planId, selectedPoints]);
+    }, [googleMapEnabled, googleReady, optimized, planId, selectedPoints]);
 
     const selectDay = (dayId: string) => {
         setSelectedDayId(dayId);

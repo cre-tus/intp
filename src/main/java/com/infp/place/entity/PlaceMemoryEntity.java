@@ -34,6 +34,12 @@ public class PlaceMemoryEntity {
     @Column(name = "source_place_id", nullable = false, length = 180)
     private String sourcePlaceId;
 
+    @Column(name = "google_place_id", length = 180)
+    private String googlePlaceId;
+
+    @Column(name = "source_data_expires_at")
+    private LocalDateTime sourceDataExpiresAt;
+
     @Column(nullable = false, length = 220)
     private String title;
 
@@ -52,6 +58,12 @@ public class PlaceMemoryEntity {
     @Column(length = 600)
     private String subtitle;
 
+    @Column(nullable = false, length = 80)
+    private String category = "place";
+
+    @Column(name = "place_type", nullable = false, length = 120)
+    private String placeType = "unknown";
+
     @Column(nullable = false)
     private double lat;
 
@@ -67,6 +79,9 @@ public class PlaceMemoryEntity {
     @Column(name = "selection_count", nullable = false)
     private int selectionCount;
 
+    @Column(name = "review_count", nullable = false)
+    private int reviewCount;
+
     @Column(name = "last_selected_at")
     private LocalDateTime lastSelectedAt;
 
@@ -81,8 +96,10 @@ public class PlaceMemoryEntity {
         LocalDateTime now = LocalDateTime.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
-        if (lastSelectedAt == null) lastSelectedAt = now;
-        if (selectionCount <= 0) selectionCount = 1;
+        if (selectionCount < 0) selectionCount = 0;
+        if (reviewCount < 0) reviewCount = 0;
+        if (category == null || category.isBlank()) category = "place";
+        if (placeType == null || placeType.isBlank()) placeType = "unknown";
     }
 
     @PreUpdate

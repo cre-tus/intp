@@ -81,6 +81,9 @@ export default function ProfileMenu() {
                         {me?.role === "ADMIN" && (
                             <>
                                 <MenuButton onClick={() => go("/admin/server-test")}>서버 테스트</MenuButton>
+                                <MenuButton onClick={() => go("/admin/ml-ingest")}>여행 데이터 수집</MenuButton>
+                                <MenuButton onClick={() => go("/admin/place-dataset")}>장소 검색 데이터셋</MenuButton>
+                                <MenuButton onClick={() => go("/admin/recommendation-compare")}>여행 추천 모델 비교</MenuButton>
                                 <MenuButton onClick={() => go("/admin/payments")}>결제 관리하기</MenuButton>
                             </>
                         )}

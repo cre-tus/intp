@@ -9,4 +9,10 @@ public interface PaymentRequestRepository extends JpaRepository<PaymentRequestEn
     List<PaymentRequestEntity> findAllByOrderByCreatedAtDesc();
 
     Optional<PaymentRequestEntity> findFirstByPlanIdAndStatusOrderByCreatedAtDesc(String planId, PaymentStatus status);
+
+    List<PaymentRequestEntity> findAllByPlanIdAndStatus(String planId, PaymentStatus status);
+
+    boolean existsByPlanIdAndStatus(String planId, PaymentStatus status);
+
+    boolean existsByPlanIdAndRequester_IdAndStatus(String planId, Long requesterId, PaymentStatus status);
 }

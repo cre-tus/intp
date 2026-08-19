@@ -5,6 +5,7 @@ public record CreatePaymentRequest(
         String planTitle,
         String depositorName,
         String depositBank,
-        String depositAccount
+        String depositAccount,
+        Boolean resubmit
 ) {
 }

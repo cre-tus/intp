@@ -47,19 +47,86 @@ node_modules/
 
 # Local map/search/GTFS data volumes
 db/gtfs/
+db/gtfs.zip
 nominatim/
 tiles/
-/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/meta.json
-/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/private_key.json
-/certbot/conf/accounts/acme-v02.api.letsencrypt.org/directory/48c5dc77fe1f7793b6db3b9f23a69c0c/regr.json
-/certbot/conf/archive/tuk-intp.kro.kr/cert1.pem
-/certbot/conf/archive/tuk-intp.kro.kr/chain1.pem
-/certbot/conf/archive/tuk-intp.kro.kr/fullchain1.pem
-/certbot/conf/archive/tuk-intp.kro.kr/privkey1.pem
-/certbot/conf/live/tuk-intp.kro.kr/cert.pem
-/certbot/conf/live/tuk-intp.kro.kr/chain.pem
-/certbot/conf/live/tuk-intp.kro.kr/fullchain.pem
-/certbot/conf/live/tuk-intp.kro.kr/privkey.pem
-/certbot/conf/live/tuk-intp.kro.kr/README
-/certbot/conf/live/README
-/certbot/conf/renewal/tuk-intp.kro.kr.conf
+uploads/
+certbot/conf/
+certbot/www/
+data/photon/
+
+# Downloaded geodata and local search indexes
+*.osm.pbf
+*.mbtiles
+photon_data/
+photon-db-*.tar.bz2
+
+# Runtime and generated local files
+*.log
+**/__pycache__/
+*.py[cod]
+~$*
+
+# Local trip-image ingestion data and expiring provider cache
+ml/recommender/artifacts/trip_image_sources/
+ml/recommender/artifacts/trip_image_reviews/
+ml/recommender/artifacts/google_place_cache.json
+
+# One-off document generation/update scripts
+docs/build_*.py
+docs/update_*docx.py
+scripts/generate_*docx.py
+scripts/update_*spec_docx.py
+scripts/update_core_office_specs.py
+
+# Document rendering/QA/test outputs
+result/word_export_test.*
+result/google_places_spec_qa_*/
+result/google-spec-render*/
+
+# ML test/smoke/recovery artifacts (keep production artifacts visible)
+ml/recommender/artifacts/deterministic_*/
+ml/recommender/artifacts/*_smoke/
+ml/recommender/artifacts/recovery-preview-*.json
+ml/recommender/artifacts/*_backup_*/
+ml/recommender/artifacts/*_scratch/
+
+# Local test sources and fixtures
+src/test/
+ml/recommender/test_*.py
+frontend/**/*.test.*
+frontend/**/*.spec.*
+
+# Local ML datasets, checkpoints, evaluations and ingestion artifacts
+ml/recommender/artifacts/
+ml/recommender/seeds/*.json
+/여행 계획 학습 데이터셋/
+
+# Raw local dataset imports/exports (schema templates remain trackable)
+*.jsonl
+dataset*.json
+*-dataset.json
+
+# Local/backup runtime helpers
+llm-console.bat
+nginx/*.bak-*
+
+# Duplicate package-manager files (this project uses npm/package-lock.json)
+frontend/pnpm-lock.yaml
+frontend/pnpm-workspace.yaml
+
+# Superseded/research-only documentation
+docs/essential-specs.md
+docs/architecture-audit.md
+docs/realtime-websocket-crdt-plan.md
+docs/*-updated-*.docx
+docs/INTP_vs_DiffPOI_Recommendation_Improvement_Spec.docx
+
+# Presentation/report-only outputs; core Word/Excel specifications stay trackable
+result/*.png
+result/INTP_프로젝트계획서_*.docx
+result/INTP_프로젝트_트러블슈팅_*.docx
+
+# Legacy Foursquare experiment utilities
+scripts/analyze_foursquare_tokyo.js
+scripts/convert_foursquare_tokyo_dataset.js

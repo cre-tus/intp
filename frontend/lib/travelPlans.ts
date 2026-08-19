@@ -36,6 +36,7 @@ export type TravelPlanDraft = {
     title: string;
     template: TravelPlanTemplate;
     tier: TravelPlanTier;
+    costCurrency: "KRW" | "JPY";
     tripContext: TravelPlanTripContext;
     checklist: ChecklistItem[];
     days: ItineraryDay[];
@@ -78,6 +79,7 @@ export function createEmptyTravelPlan(
         title,
         template,
         tier,
+        costCurrency: "KRW",
         tripContext: {
             countryCode: "KR",
             companionType: "unknown",
@@ -95,10 +97,10 @@ export function createEmptyTravelPlan(
     };
 }
 
-export function createSpreadsheetTravelPlan(id: string, title = "엑셀형 여행 일정표", tier: TravelPlanTier = "FREE"): TravelPlanDraft {
+export function createSpreadsheetTravelPlan(id: string, title = "테이블형 여행 일정표", tier: TravelPlanTier = "FREE"): TravelPlanDraft {
     const plan = createEmptyTravelPlan(id, title, "spreadsheet", tier);
     const lodgingRow = "__lodging__";
-    const timeRows = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+    const timeRows = Array.from({ length: 25 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
     const costRows = ["아침", "점심", "저녁", "교통", "기타"];
     plan.days = Array.from({ length: 5 }, (_, dayIndex) => ({
         id: createClientId("day"),
@@ -268,6 +270,16 @@ export function travelPlanNodeLimit(plan: Pick<TravelPlanDraft, "tier">) {
     return plan.tier === "PAID" ? 20 : 10;
 }
 
+export function travelPlanTierRank(tier?: TravelPlanTier) {
+    if (tier === "PAID") return 2;
+    if (tier === "PENDING_PAID") return 1;
+    return 0;
+}
+
+export function resolveTravelPlanTier(current?: TravelPlanTier, next?: TravelPlanTier): TravelPlanTier {
+    return travelPlanTierRank(next) > travelPlanTierRank(current) ? next ?? "FREE" : current ?? "FREE";
+}
+
 export function generatePlanId() {
     return createClientId("plan");
 }
@@ -301,6 +313,7 @@ function normalizePlan(plan: Partial<TravelPlanDraft> & { id: string }): TravelP
         title: plan.title ?? "여행 계획",
         template: plan.template ?? "basic",
         tier: plan.tier ?? "FREE",
+        costCurrency: plan.costCurrency === "JPY" ? "JPY" : "KRW",
         tripContext: {
             countryCode: plan.tripContext?.countryCode ?? "KR",
             companionType: plan.tripContext?.companionType ?? "unknown",

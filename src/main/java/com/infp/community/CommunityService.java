@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.infp.community.dto.CommunityPostCommentRequest;
 import com.infp.community.dto.CommunityPostCommentResponse;
+import com.infp.community.dto.CommunityCommentReactionResponse;
 import com.infp.community.dto.CommunityPostReactionResponse;
 import com.infp.community.dto.CommunityPostRequest;
 import com.infp.community.dto.CommunityPostResponse;
@@ -19,6 +20,8 @@ import com.infp.user.entity.User;
 import com.infp.user.repository.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Comparator;
 import java.util.List;
@@ -32,6 +35,9 @@ public class CommunityService {
     private final CommunityPostLikeRepository likeRepository;
     private final CommunityPostSaveRepository saveRepository;
     private final CommunityPostCommentRepository commentRepository;
+    private final CommunityPostCommentLikeRepository commentLikeRepository;
+    private final CommunityPostMediaRepository mediaRepository;
+    private final CommunityMediaStorageService mediaStorageService;
     private final UserFollowRepository followRepository;
     private final TravelPlanRepository travelPlanRepository;
     private final TravelPlanService travelPlanService;
@@ -43,6 +49,9 @@ public class CommunityService {
             CommunityPostLikeRepository likeRepository,
             CommunityPostSaveRepository saveRepository,
             CommunityPostCommentRepository commentRepository,
+            CommunityPostCommentLikeRepository commentLikeRepository,
+            CommunityPostMediaRepository mediaRepository,
+            CommunityMediaStorageService mediaStorageService,
             UserFollowRepository followRepository,
             TravelPlanRepository travelPlanRepository,
             TravelPlanService travelPlanService,
@@ -52,6 +61,9 @@ public class CommunityService {
         this.likeRepository = likeRepository;
         this.saveRepository = saveRepository;
         this.commentRepository = commentRepository;
+        this.commentLikeRepository = commentLikeRepository;
+        this.mediaRepository = mediaRepository;
+        this.mediaStorageService = mediaStorageService;
         this.followRepository = followRepository;
         this.travelPlanRepository = travelPlanRepository;
         this.travelPlanService = travelPlanService;
@@ -196,22 +208,31 @@ public class CommunityService {
             throw new IllegalArgumentException("커뮤니티 피드는 최대 10개까지만 올릴 수 있습니다.");
         }
 
-        TravelPlanEntity plan = resolveOwnedPlan(request.planId(), userId);
+        String postType = normalizePostType(request.postType(), request.planId());
+        TravelPlanEntity plan = "plan".equals(postType) ? resolveOwnedPlan(request.planId(), userId) : null;
 
         CommunityPostEntity post = new CommunityPostEntity();
         post.setAuthor(author);
         post.setPlan(plan);
-        post.setTitle(plan == null ? blankToEmpty(request.title(), 160) : required(request.title(), "제목을 입력해주세요.", 160));
+        post.setPostType(postType);
+        post.setTitle("photo".equals(postType) ? blankToEmpty(request.title(), 160) : required(request.title(), "제목을 입력해주세요.", 160));
         post.setCity(plan == null ? blankToEmpty(request.city(), 80) : required(request.city(), "도시를 입력해주세요.", 80));
         post.setDuration(plan == null ? blankToEmpty(request.duration(), 40) : required(request.duration(), "여행 기간을 입력해주세요.", 40));
         post.setBudget(plan == null ? blankToEmpty(request.budget(), 40) : required(request.budget(), "예산을 입력해주세요.", 40));
         post.setImageKey(normalizeImageKey(request.imageKey()));
-        post.setImageUrl(optional(request.imageUrl(), 600_000));
-        post.setCaption(required(request.caption(), "소개 내용을 입력해주세요.", 2000));
+        post.setImageUrl(optional(request.imageUrl(), 8_000_000));
+        post.setMediaType("qna".equals(postType) ? normalizeMediaType(request.mediaType(), request.mediaUrl()) : null);
+        post.setMediaUrl("qna".equals(postType) ? optional(request.mediaUrl(), 600) : null);
+        post.setCaption("qna".equals(postType) ? required(request.questionDetail(), "질문 내용을 입력해주세요.", 2000) : required(request.caption(), "소개 내용을 입력해주세요.", 2000));
+        post.setQuestionDetail("qna".equals(postType) ? required(request.questionDetail(), "질문 내용을 입력해주세요.", 3000) : null);
+        post.setAttempted("qna".equals(postType) ? optional(request.attempted(), 1200) : null);
+        post.setAnswerPreference("qna".equals(postType) ? optional(request.answerPreference(), 160) : null);
         post.setTagsJson(writeList(limitList(request.tags(), 8, 24)));
         post.setRouteJson(writeList(limitList(request.route(), 10, 40)));
 
-        return toResponse(postRepository.save(post), userId);
+        CommunityPostEntity saved = postRepository.save(post);
+        syncMedia(saved, request);
+        return toResponse(saved, userId);
     }
 
     @Transactional
@@ -220,18 +241,27 @@ public class CommunityService {
         if (!post.getAuthor().getId().equals(userId)) {
             throw new IllegalArgumentException("내가 작성한 커뮤니티 글만 수정할 수 있습니다.");
         }
-        post.setPlan(resolveOwnedPlan(request.planId(), userId));
+        String postType = normalizePostType(request.postType(), request.planId());
+        post.setPostType(postType);
+        post.setPlan("plan".equals(postType) ? resolveOwnedPlan(request.planId(), userId) : null);
         TravelPlanEntity plan = post.getPlan();
-        post.setTitle(plan == null ? blankToEmpty(request.title(), 160) : required(request.title(), "제목을 입력해주세요.", 160));
+        post.setTitle("photo".equals(postType) ? blankToEmpty(request.title(), 160) : required(request.title(), "제목을 입력해주세요.", 160));
         post.setCity(plan == null ? blankToEmpty(request.city(), 80) : required(request.city(), "도시를 입력해주세요.", 80));
         post.setDuration(plan == null ? blankToEmpty(request.duration(), 40) : required(request.duration(), "여행 기간을 입력해주세요.", 40));
         post.setBudget(plan == null ? blankToEmpty(request.budget(), 40) : required(request.budget(), "예산을 입력해주세요.", 40));
         post.setImageKey(normalizeImageKey(request.imageKey()));
-        post.setImageUrl(optional(request.imageUrl(), 600_000));
-        post.setCaption(required(request.caption(), "소개 내용을 입력해주세요.", 2000));
+        post.setImageUrl(optional(request.imageUrl(), 8_000_000));
+        post.setMediaType("qna".equals(postType) ? normalizeMediaType(request.mediaType(), request.mediaUrl()) : null);
+        post.setMediaUrl("qna".equals(postType) ? optional(request.mediaUrl(), 600) : null);
+        post.setCaption("qna".equals(postType) ? required(request.questionDetail(), "질문 내용을 입력해주세요.", 2000) : required(request.caption(), "소개 내용을 입력해주세요.", 2000));
+        post.setQuestionDetail("qna".equals(postType) ? required(request.questionDetail(), "질문 내용을 입력해주세요.", 3000) : null);
+        post.setAttempted("qna".equals(postType) ? optional(request.attempted(), 1200) : null);
+        post.setAnswerPreference("qna".equals(postType) ? optional(request.answerPreference(), 160) : null);
         post.setTagsJson(writeList(limitList(request.tags(), 8, 24)));
         post.setRouteJson(writeList(limitList(request.route(), 10, 40)));
-        return toResponse(postRepository.save(post), userId);
+        CommunityPostEntity saved = postRepository.save(post);
+        syncMedia(saved, request);
+        return toResponse(saved, userId);
     }
 
     private TravelPlanEntity resolveOwnedPlan(String planIdValue, long userId) {
@@ -243,6 +273,34 @@ public class CommunityService {
             throw new IllegalArgumentException("내가 만든 여행 계획만 커뮤니티에 공유할 수 있습니다.");
         }
         return plan;
+    }
+
+    private void syncMedia(CommunityPostEntity post, CommunityPostRequest request) {
+        List<String> replacedUrls = mediaRepository.findByPost_IdOrderBySortOrderAscIdAsc(post.getId()).stream()
+                .map(CommunityPostMediaEntity::getStorageUrl)
+                .filter((url) -> url != null && !url.equals(request.mediaUrl()))
+                .toList();
+        mediaRepository.deleteByPost_Id(post.getId());
+        deleteMediaAfterCommit(replacedUrls);
+        if (!"qna".equals(responsePostType(post))) return;
+
+        String mediaType = normalizeMediaType(request.mediaType(), request.mediaUrl());
+        String mediaUrl = optional(request.mediaUrl(), 600);
+        if (mediaType == null || mediaUrl == null) return;
+        if ("video".equals(mediaType) && (request.mediaDurationSeconds() == null || request.mediaDurationSeconds() >= 300)) {
+            throw new IllegalArgumentException("동영상은 5분 미만만 업로드할 수 있습니다.");
+        }
+
+        CommunityPostMediaEntity media = new CommunityPostMediaEntity();
+        media.setPost(post);
+        media.setMediaType(mediaType);
+        media.setStorageUrl(mediaUrl);
+        media.setOriginalFilename(optional(request.mediaOriginalFilename(), 255));
+        media.setMimeType(optional(request.mediaMimeType(), 120));
+        media.setSizeBytes(request.mediaSizeBytes());
+        media.setDurationSeconds(request.mediaDurationSeconds());
+        media.setSortOrder(0);
+        mediaRepository.save(media);
     }
 
     @Transactional
@@ -315,12 +373,47 @@ public class CommunityService {
     }
 
     @Transactional
+    public CommunityCommentReactionResponse toggleCommentLike(long userId, long postId, long commentId) {
+        CommunityPostCommentEntity comment = requireComment(postId, commentId);
+        if (commentLikeRepository.existsByComment_IdAndUser_Id(commentId, userId)) {
+            commentLikeRepository.deleteByComment_IdAndUser_Id(commentId, userId);
+            return new CommunityCommentReactionResponse(commentId, false, commentLikeRepository.countByComment_Id(commentId));
+        }
+
+        CommunityPostCommentLikeEntity like = new CommunityPostCommentLikeEntity();
+        like.setComment(comment);
+        like.setUser(requireUser(userId));
+        commentLikeRepository.save(like);
+        return new CommunityCommentReactionResponse(commentId, true, commentLikeRepository.countByComment_Id(commentId));
+    }
+
+    @Transactional
     public void deletePost(long userId, long postId) {
         CommunityPostEntity post = requirePost(postId);
         if (!post.getAuthor().getId().equals(userId)) {
             throw new IllegalArgumentException("내가 작성한 커뮤니티 글만 삭제할 수 있습니다.");
         }
+        List<String> mediaUrls = mediaRepository.findByPost_IdOrderBySortOrderAscIdAsc(postId).stream()
+                .map(CommunityPostMediaEntity::getStorageUrl)
+                .toList();
+        if (mediaUrls.isEmpty() && post.getMediaUrl() != null) mediaUrls = List.of(post.getMediaUrl());
         postRepository.delete(post);
+        deleteMediaAfterCommit(mediaUrls);
+    }
+
+    private void deleteMediaAfterCommit(List<String> mediaUrls) {
+        if (mediaUrls == null || mediaUrls.isEmpty()) return;
+        Runnable cleanup = () -> mediaUrls.forEach(mediaStorageService::deleteByPublicUrl);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            cleanup.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cleanup.run();
+            }
+        });
     }
 
     private CommunityPostEntity requirePost(long postId) {
@@ -347,9 +440,14 @@ public class CommunityService {
         String authorName = displayName(author);
         String handle = "@" + author.getEmail().split("@")[0];
         boolean hasViewer = viewerId != null;
+        CommunityPostMediaEntity media = mediaRepository.findByPost_IdOrderBySortOrderAscIdAsc(post.getId())
+                .stream()
+                .findFirst()
+                .orElse(null);
 
         return new CommunityPostResponse(
                 post.getId(),
+                responsePostType(post),
                 post.getPlan() == null ? null : post.getPlan().getExternalId(),
                 author.getId(),
                 authorName,
@@ -361,7 +459,12 @@ public class CommunityService {
                 post.getBudget(),
                 post.getImageKey(),
                 post.getImageUrl(),
+                media == null ? post.getMediaType() : media.getMediaType(),
+                media == null ? post.getMediaUrl() : media.getStorageUrl(),
                 post.getCaption(),
+                post.getQuestionDetail(),
+                post.getAttempted(),
+                post.getAnswerPreference(),
                 readList(post.getTagsJson()),
                 readList(post.getRouteJson()),
                 likeRepository.countByPost_Id(post.getId()),
@@ -398,6 +501,29 @@ public class CommunityService {
             case "osaka", "sapporo", "fukuoka", "nagoya" -> key;
             default -> "tokyo";
         };
+    }
+
+    private String normalizeMediaType(String value, String mediaUrl) {
+        String url = optional(mediaUrl, 600);
+        if (url == null) return null;
+        String type = value == null ? "" : value.trim().toLowerCase();
+        if ("video".equals(type) || url.startsWith("data:video/")) return "video";
+        if ("image".equals(type) || url.startsWith("data:image/")) return "image";
+        if (url.startsWith("/uploads/")) return type.isBlank() ? "image" : type;
+        return null;
+    }
+
+    private String normalizePostType(String value, String planId) {
+        String type = value == null ? "" : value.trim().toLowerCase();
+        if ("qna".equals(type) || "photo".equals(type) || "plan".equals(type)) return type;
+        return optional(planId, 100) == null ? "photo" : "plan";
+    }
+
+    private String responsePostType(CommunityPostEntity post) {
+        if (post.getQuestionDetail() != null && !post.getQuestionDetail().isBlank()) return "qna";
+        String type = post.getPostType();
+        if (type == null || type.isBlank()) return post.getPlan() == null ? "photo" : "plan";
+        return type;
     }
 
     private List<String> limitList(List<String> values, int maxItems, int maxLength) {
@@ -441,6 +567,8 @@ public class CommunityService {
                 comment.getContent(),
                 viewerId != null && comment.getUser().getId().equals(viewerId),
                 edited,
+                commentLikeRepository.countByComment_Id(comment.getId()),
+                viewerId != null && commentLikeRepository.existsByComment_IdAndUser_Id(comment.getId(), viewerId),
                 comment.getCreatedAt(),
                 comment.getUpdatedAt()
         );

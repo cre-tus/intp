@@ -97,7 +97,7 @@ export default function PrimaryButton() {
         const id = generatePlanId();
         const safeTitle = title.trim() || (
             template === "spreadsheet"
-                ? "스프레드시트 여행 일정"
+                ? "테이블형 여행 일정"
                 : template === "timeline"
                     ? "트립 보드 여행 일정"
                     : template === "route_sheet"
@@ -208,8 +208,8 @@ export default function PrimaryButton() {
                                 />
                                 <TemplateButton
                                     active={template === "spreadsheet"}
-                                    title="표 형식 일정"
-                                    description="시간표와 비용을 셀 단위로 편집하는 방식입니다."
+                                    title="테이블형 일정"
+                                    description="시간과 칸 크기를 직접 조절하며 셀 단위로 편집하는 방식입니다."
                                     onClick={() => setTemplate("spreadsheet")}
                                 />
                                 <TemplateButton
@@ -266,7 +266,7 @@ export default function PrimaryButton() {
                                 <div className="mt-5 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
                                     <div>결제 금액: <strong>3,500원</strong></div>
                                     <div className="mt-2 border-t border-gray-200 pt-2 text-xs text-gray-500">
-                                        입금 계좌: <strong className="font-bold text-gray-900">352-0358-5355-13 농협 양예진</strong>
+                                        입금 계좌: <strong className="font-bold text-gray-900">352-0358-5355-13 농협 윤진영</strong>
                                     </div>
                                 </div>
                                 <PaymentInput label="입금자명" value={depositorName} onChange={setDepositorName} />

@@ -1,15 +1,11 @@
 package com.infp.place.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.infp.place.dto.PlaceItem;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -17,21 +13,16 @@ import java.util.Map;
 
 @Service
 public class GooglePlaceSearchService {
-    private static final Duration CACHE_TTL = Duration.ofDays(14);
     private static final int MAX_RESULTS = 5;
 
     private final WebClient webClient;
-    private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
     private final String apiKey;
 
     public GooglePlaceSearchService(
             WebClient.Builder webClientBuilder,
-            StringRedisTemplate redisTemplate,
             @Value("${google.maps.server-api-key:${GOOGLE_PRIVATE_API:${GOOGLE_SERVER_API_KEY:${GOOGLE_CLOUD_API_KEY:}}}}") String apiKey
     ) {
         this.webClient = webClientBuilder.baseUrl("https://maps.googleapis.com").build();
-        this.redisTemplate = redisTemplate;
         this.apiKey = apiKey == null ? "" : apiKey.trim();
     }
 
@@ -44,12 +35,8 @@ public class GooglePlaceSearchService {
         String region = normalizeRegion(countryCode);
         if (normalized.length() < 2) return Mono.just(List.of());
         if (apiKey.isBlank()) {
-            return Mono.error(new IllegalStateException("Google 吏??API ?ㅺ? ?ㅼ젙?섏? ?딆븯?듬땲??"));
+            return Mono.error(new IllegalStateException("Google 장소 API 키가 설정되지 않았습니다."));
         }
-
-        String cacheKey = "place:google:text:v2:" + region + ":" + normalized;
-        List<PlaceItem> cached = readCache(cacheKey);
-        if (cached != null) return Mono.just(cached);
 
         return webClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -61,11 +48,7 @@ public class GooglePlaceSearchService {
                         .build())
                 .retrieve()
                 .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
-                .map(body -> {
-                    List<PlaceItem> items = toPlaceItems(body, normalized);
-                    writeCache(cacheKey, items);
-                    return items;
-                });
+                .map(body -> toPlaceItems(body, normalized));
     }
 
     private List<PlaceItem> toPlaceItems(Map<String, Object> body, String sourceQuery) {
@@ -101,28 +84,18 @@ public class GooglePlaceSearchService {
                     lat,
                     lon,
                     importance(result.get("rating")),
-                    sourceQuery
+                    sourceQuery,
+                    "google",
+                    firstGoogleType(result.get("types")),
+                    "google"
             ));
         }
         return items;
     }
 
-    private List<PlaceItem> readCache(String cacheKey) {
-        try {
-            String cached = redisTemplate.opsForValue().get(cacheKey);
-            if (cached == null || cached.isBlank()) return null;
-            return objectMapper.readValue(cached, new TypeReference<>() {});
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
-    private void writeCache(String cacheKey, List<PlaceItem> items) {
-        try {
-            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(items), CACHE_TTL);
-        } catch (Exception ignored) {
-            // Cache failures should not block place search.
-        }
+    private static String firstGoogleType(Object value) {
+        if (!(value instanceof List<?> types) || types.isEmpty()) return "unknown";
+        return stringValue(types.get(0));
     }
 
     private static double coordinate(Map<?, ?> result, String key) {

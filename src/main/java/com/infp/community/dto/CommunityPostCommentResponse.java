@@ -11,6 +11,8 @@ public record CommunityPostCommentResponse(
         String content,
         boolean ownComment,
         boolean edited,
+        long likes,
+        boolean liked,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

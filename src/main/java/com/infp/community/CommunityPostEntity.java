@@ -39,6 +39,9 @@ public class CommunityPostEntity {
     @JoinColumn(name = "plan_id", columnDefinition = "BIGINT UNSIGNED")
     private TravelPlanEntity plan;
 
+    @Column(name = "post_type", nullable = false, length = 20)
+    private String postType = "plan";
+
     @Column(nullable = false, length = 160)
     private String title;
 
@@ -55,12 +58,30 @@ public class CommunityPostEntity {
     private String imageKey = "tokyo";
 
     @Lob
-    @Column(name = "image_url", columnDefinition = "TEXT")
+    @Column(name = "image_url", columnDefinition = "LONGTEXT")
     private String imageUrl;
+
+    @Column(name = "media_type", length = 20)
+    private String mediaType;
+
+    @Lob
+    @Column(name = "media_url", columnDefinition = "LONGTEXT")
+    private String mediaUrl;
 
     @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String caption;
+
+    @Lob
+    @Column(name = "question_detail", columnDefinition = "TEXT")
+    private String questionDetail;
+
+    @Lob
+    @Column(name = "attempted", columnDefinition = "TEXT")
+    private String attempted;
+
+    @Column(name = "answer_preference", length = 160)
+    private String answerPreference;
 
     @Lob
     @Column(name = "tags_json", columnDefinition = "TEXT")
@@ -82,6 +103,7 @@ public class CommunityPostEntity {
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
         if (imageKey == null || imageKey.isBlank()) imageKey = "tokyo";
+        if (postType == null || postType.isBlank()) postType = plan == null ? "photo" : "plan";
     }
 
     @PreUpdate

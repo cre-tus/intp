@@ -1,19 +1,28 @@
 import { X } from "lucide-react";
 import PlaceSearchInput, { PlaceResult, type PlaceSearchOrigin } from "./PlaceSerachInput"
-import type { TravelCountryCode } from "@/lib/travelPlans";
+import type { TravelCountryCode, TravelPlanTier } from "@/lib/travelPlans";
 
 export default function PlaceSearchModal(props: {
     open: boolean;
     onClose: () => void;
     onSelect: (place: PlaceResult) => void;
     initialQuery?: string;
+    initialLat?: number | null;
+    initialLon?: number | null;
     showFixedOption?: boolean;
     fixedOptionChecked?: boolean;
     onFixedOptionChange?: (checked: boolean) => void;
     paidPlaces?: boolean;
+    tier?: TravelPlanTier;
     planId?: string;
+    planTitle?: string;
     countryCode?: TravelCountryCode;
     origin?: PlaceSearchOrigin | null;
+    onUpgradeRequested?: () => void;
+    onTierSynced?: (tier: TravelPlanTier) => void;
+    adminGoogleSearch?: boolean;
+    preferNearby?: boolean;
+    knownPlaces?: PlaceResult[];
 }) {
     if (!props.open) return null;
 
@@ -35,13 +44,22 @@ export default function PlaceSearchModal(props: {
                 <div className="min-h-0 overflow-y-auto overflow-x-hidden">
                     <PlaceSearchInput
                         initialQuery={props.initialQuery}
+                        initialLat={props.initialLat}
+                        initialLon={props.initialLon}
                         showFixedOption={props.showFixedOption}
                         fixedOptionChecked={props.fixedOptionChecked}
                         onFixedOptionChange={props.onFixedOptionChange}
                         paidPlaces={props.paidPlaces}
+                        tier={props.tier}
                         planId={props.planId}
+                        planTitle={props.planTitle}
                         countryCode={props.countryCode}
                         origin={props.origin}
+                        onUpgradeRequested={props.onUpgradeRequested}
+                        onTierSynced={props.onTierSynced}
+                        adminGoogleSearch={props.adminGoogleSearch}
+                        preferNearby={props.preferNearby}
+                        knownPlaces={props.knownPlaces}
                         onSelect={(place) => {
                             props.onSelect(place);
                             props.onClose();

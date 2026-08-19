@@ -3,6 +3,8 @@ package com.infp.community;
 import com.infp.auth.jwt.JwtAuthFilter;
 import com.infp.community.dto.CommunityPostCommentRequest;
 import com.infp.community.dto.CommunityPostCommentResponse;
+import com.infp.community.dto.CommunityMediaUploadResponse;
+import com.infp.community.dto.CommunityCommentReactionResponse;
 import com.infp.community.dto.CommunityPostReactionResponse;
 import com.infp.community.dto.CommunityPostRequest;
 import com.infp.community.dto.CommunityPostResponse;
@@ -20,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -27,9 +30,11 @@ import java.util.List;
 @RequestMapping("/api/community/posts")
 public class CommunityController {
     private final CommunityService service;
+    private final CommunityMediaStorageService mediaStorageService;
 
-    public CommunityController(CommunityService service) {
+    public CommunityController(CommunityService service, CommunityMediaStorageService mediaStorageService) {
         this.service = service;
+        this.mediaStorageService = mediaStorageService;
     }
 
     @GetMapping
@@ -95,6 +100,16 @@ public class CommunityController {
             @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal
     ) {
         return ResponseEntity.ok(service.create(requireUser(principal), request));
+    }
+
+    @PostMapping("/media")
+    public ResponseEntity<CommunityMediaUploadResponse> uploadMedia(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(required = false) Integer durationSeconds,
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal
+    ) {
+        requireUser(principal);
+        return ResponseEntity.ok(mediaStorageService.store(file, durationSeconds));
     }
 
     @PutMapping("/{postId}")
@@ -170,6 +185,15 @@ public class CommunityController {
     ) {
         service.deleteComment(requireUser(principal), postId, commentId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{postId}/comments/{commentId}/like")
+    public ResponseEntity<CommunityCommentReactionResponse> likeComment(
+            @PathVariable long postId,
+            @PathVariable long commentId,
+            @AuthenticationPrincipal JwtAuthFilter.AuthPrincipal principal
+    ) {
+        return ResponseEntity.ok(service.toggleCommentLike(requireUser(principal), postId, commentId));
     }
 
     @DeleteMapping("/{postId}")

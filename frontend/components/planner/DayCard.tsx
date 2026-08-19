@@ -3,6 +3,8 @@ import { Calendar, GripVertical, Plus, Trash2 } from "lucide-react";
 import type { ItineraryActivity, ItineraryDay } from "./TravelItinerary";
 import SortableActivityRow from "@/components/planner/Sortable/SortableActivityRow";
 import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
+import type { TravelCountryCode, TravelPlanTier } from "@/lib/travelPlans";
+import type { PlaceResult } from "@/components/planner/ActivityField/PlaceSerachInput";
 import {
     closestCenter,
     DndContext,
@@ -46,8 +48,14 @@ export default function DayCard(props: {
     onReorderActivities: (dayId: string, oldIndex: number, newIndex: number) => void;
     dragHandleProps?: DragHandleProps;
     paidPlaces?: boolean;
+    tier?: TravelPlanTier;
     planId?: string;
+    planTitle?: string;
+    countryCode?: TravelCountryCode;
+    onUpgradeRequested?: () => void;
+    onTierSynced?: (tier: TravelPlanTier) => void;
     currency?: CurrencyRate;
+    knownPlaces?: PlaceResult[];
 }) {
     const { day, dayIndex } = props;
     const currency = props.currency ?? DEFAULT_CURRENCY;
@@ -143,10 +151,16 @@ export default function DayCard(props: {
                                 onChangeTime={(next) => props.onSetActivityTime(day.id, activity.id, next)}
                                 onClearTimeError={props.onClearTimeError}
                                 paidPlaces={props.paidPlaces}
+                                tier={props.tier}
                                 planId={props.planId}
+                                planTitle={props.planTitle}
+                                countryCode={props.countryCode}
                                 searchOrigin={activityToPlaceOrigin(day.activities[idx - 1])}
+                                onUpgradeRequested={props.onUpgradeRequested}
+                                onTierSynced={props.onTierSynced}
                                 onReorderActivities={props.onReorderActivities}
                                 totalActivities={day.activities.length}
+                                knownPlaces={props.knownPlaces}
                             />
                         ))}
                     </SortableContext>

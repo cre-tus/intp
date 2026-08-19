@@ -106,6 +106,73 @@ CREATE TABLE places (
     KEY idx_places_lat_lon (latitude, longitude)
 ) COMMENT='장소 마스터';
 
+CREATE TABLE place_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    source VARCHAR(30) NOT NULL,
+    source_place_id VARCHAR(180) NOT NULL,
+    google_place_id VARCHAR(180) NULL COMMENT 'Nominatim 전환 후 보존하는 Google Place ID',
+    source_data_expires_at DATETIME(6) NULL COMMENT 'Google 원본 데이터 폐기 시각',
+    title VARCHAR(220) NOT NULL,
+    display_title VARCHAR(320) NULL,
+    title_ko VARCHAR(220) NULL,
+    title_en VARCHAR(220) NULL,
+    title_ja VARCHAR(220) NULL,
+    subtitle VARCHAR(600) NULL,
+    category VARCHAR(80) NOT NULL DEFAULT 'place' COMMENT 'Nominatim category 원본',
+    place_type VARCHAR(120) NOT NULL DEFAULT 'unknown' COMMENT 'Nominatim type 원본',
+    lat DOUBLE NOT NULL,
+    lon DOUBLE NOT NULL,
+    coordinate_key VARCHAR(64) GENERATED ALWAYS AS (CONCAT(ROUND(lat, 6), ',', ROUND(lon, 6))) STORED,
+    normalized_text VARCHAR(1200) NOT NULL,
+    selected_query VARCHAR(500) NULL,
+    selection_count INT NOT NULL DEFAULT 0,
+    last_selected_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_place_memory_source_place (source, source_place_id),
+    KEY idx_place_memory_coordinate (coordinate_key),
+    KEY idx_place_memory_selection (selection_count, last_selected_at)
+) COMMENT='장소 검색 로컬 메모리';
+
+CREATE TABLE retained_google_place_ids (
+    place_id VARCHAR(180) NOT NULL,
+    first_seen_at DATETIME(6) NOT NULL,
+    last_seen_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (place_id)
+) COMMENT='Google 원본 폐기 후 영구 보관하는 Place ID';
+
+CREATE TABLE place_search_learning (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    country_code VARCHAR(2) NOT NULL,
+    normalized_query VARCHAR(300) NOT NULL,
+    compact_query VARCHAR(300) NOT NULL,
+    source VARCHAR(30) NOT NULL,
+    source_place_id VARCHAR(180) NOT NULL,
+    discovery_count INT NOT NULL DEFAULT 0,
+    selection_count INT NOT NULL DEFAULT 0,
+    last_discovered_at DATETIME(6) NULL,
+    last_selected_at DATETIME(6) NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_place_search_learning_query_place
+        (country_code, normalized_query, source, source_place_id),
+    KEY idx_place_search_learning_compact (compact_query),
+    KEY idx_place_search_learning_place (source, source_place_id),
+    KEY idx_place_search_learning_rank (selection_count, discovery_count, last_selected_at)
+) COMMENT='Google 검색어와 장소의 학습 통계';
+
+CREATE TABLE place_learning_imports (
+    import_key CHAR(64) NOT NULL,
+    source_sha256 CHAR(64) NOT NULL,
+    normalized_query VARCHAR(300) NOT NULL,
+    source_place_id VARCHAR(180) NOT NULL,
+    imported_at DATETIME(6) NOT NULL,
+    PRIMARY KEY (import_key),
+    KEY idx_place_learning_import_source (source_sha256)
+) COMMENT='Approved trip-image OSM learning import ledger';
+
 CREATE TABLE plan_items (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '일정 PK',
     plan_day_id BIGINT UNSIGNED NOT NULL COMMENT 'Day ID',
@@ -133,7 +200,7 @@ CREATE TABLE plan_items (
 ) COMMENT='기본형 일정 상세';
 
 CREATE TABLE plan_spreadsheet_cells (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '엑셀형 셀 PK',
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '테이블형 셀 PK',
     plan_id BIGINT UNSIGNED NOT NULL COMMENT '플랜 ID',
     external_day_id VARCHAR(100) NULL COMMENT '프론트 Day UUID',
     external_activity_id VARCHAR(100) NULL COMMENT '프론트 셀/활동 UUID',
@@ -158,7 +225,7 @@ CREATE TABLE plan_spreadsheet_cells (
     CONSTRAINT fk_plan_spreadsheet_cells_plan
         FOREIGN KEY (plan_id) REFERENCES plans(id)
         ON DELETE CASCADE ON UPDATE CASCADE
-) COMMENT='엑셀형 여행 템플릿 셀';
+) COMMENT='테이블형 여행 템플릿 셀';
 
 CREATE TABLE plan_checklist_items (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '준비물 PK',

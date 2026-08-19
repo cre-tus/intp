@@ -13,8 +13,10 @@ public class QueryVariantBuilder {
     private static final List<String> AIRPORT_SUFFIXES = List.of("공항", "空港");
     private static final List<String> TOWER_SUFFIXES = List.of("타워", "タワー");
     private static final List<String> PARK_SUFFIXES = List.of("공원", "公園");
+    private static final List<String> SEARCH_INTENT_SUFFIXES = List.of("카페", "까페", "맛집", "식당", "쇼핑");
 
     private static final Map<String, List<String>> TRANSLATIONS = Map.ofEntries(
+            Map.entry("쿠라스시", List.of("くら寿司", "Kura Sushi")),
             Map.entry("도쿄", List.of("東京", "Tokyo")),
             Map.entry("동경", List.of("東京", "Tokyo")),
             Map.entry("도쿄역", List.of("東京駅", "Tokyo Station")),
@@ -40,6 +42,24 @@ public class QueryVariantBuilder {
             Map.entry("나리타공항", List.of("成田空港", "Narita Airport")),
             Map.entry("도쿄타워", List.of("東京タワー", "Tokyo Tower")),
             Map.entry("도쿄스카이트리", List.of("東京スカイツリー", "Tokyo Skytree")),
+            Map.entry("센소지", List.of("浅草寺", "Senso-ji Tokyo")),
+            Map.entry("아사쿠사", List.of("浅草", "Asakusa Tokyo")),
+            Map.entry("도쿄캐릭터스트리트", List.of("東京キャラクターストリート", "Tokyo Character Street")),
+            Map.entry("갓파바라", List.of("かっぱ橋道具街", "Kappabashi Tokyo")),
+            Map.entry("갓파바시", List.of("かっぱ橋道具街", "Kappabashi Tokyo")),
+            Map.entry("캇파바시", List.of("かっぱ橋道具街", "Kappabashi Tokyo")),
+            Map.entry("선샤인시티", List.of("サンシャインシティ", "Sunshine City Ikebukuro Tokyo")),
+            Map.entry("디즈니씨", List.of("東京ディズニーシー", "Tokyo DisneySea")),
+            Map.entry("도쿄디즈니씨", List.of("東京ディズニーシー", "Tokyo DisneySea")),
+            Map.entry("우에노과학관", List.of("国立科学博物館", "National Museum of Nature and Science Tokyo")),
+            Map.entry("우에노동물원", List.of("上野動物園", "Ueno Zoo")),
+            Map.entry("토부레벤트도쿄호텔", List.of("東武ホテルレバント東京", "Tobu Hotel Levant Tokyo")),
+            Map.entry("토부레반트도쿄호텔", List.of("東武ホテルレバント東京", "Tobu Hotel Levant Tokyo")),
+            Map.entry("다이이치호텔", List.of("第一ホテル東京", "Dai-ichi Hotel Tokyo", "Daiichi Hotel Tokyo")),
+            Map.entry("다이이치호텔도쿄", List.of("第一ホテル東京", "Dai-ichi Hotel Tokyo", "Daiichi Hotel Tokyo")),
+            Map.entry("크라운힐스호텔우에노", List.of("ホテルクラウンヒルズ上野プレミア", "Hotel Crown Hills Ueno Premier")),
+            Map.entry("호텔크라운힐스우에노", List.of("ホテルクラウンヒルズ上野プレミア", "Hotel Crown Hills Ueno Premier")),
+            Map.entry("크라운힐스우에노프리미어", List.of("ホテルクラウンヒルズ上野プレミア", "Hotel Crown Hills Ueno Premier")),
             Map.entry("서울역", List.of("Seoul Station")),
             Map.entry("부산역", List.of("Busan Station")),
             Map.entry("제주공항", List.of("Jeju International Airport")),
@@ -59,6 +79,7 @@ public class QueryVariantBuilder {
         addVariant(set, s.replace(" ", ""));
         addTranslations(set, s);
         addSuffixVariants(set, s);
+        addSearchIntentVariants(set, s);
 
         return set.stream().distinct().limit(12).toList();
     }
@@ -85,6 +106,16 @@ public class QueryVariantBuilder {
         addSuffixTranslations(set, value, AIRPORT_SUFFIXES, List.of("空港", " Airport"));
         addSuffixTranslations(set, value, TOWER_SUFFIXES, List.of("タワー", " Tower"));
         addSuffixTranslations(set, value, PARK_SUFFIXES, List.of("公園", " Park"));
+    }
+
+    private static void addSearchIntentVariants(Set<String> set, String value) {
+        String compact = compactKey(value);
+        for (String suffix : SEARCH_INTENT_SUFFIXES) {
+            if (!compact.endsWith(suffix) || compact.length() <= suffix.length()) continue;
+            String base = compact.substring(0, compact.length() - suffix.length());
+            addVariant(set, base);
+            TRANSLATIONS.getOrDefault(base, List.of()).forEach(item -> addVariant(set, item));
+        }
     }
 
     private static void addSuffixTranslations(Set<String> set, String value, List<String> sourceSuffixes, List<String> translatedSuffixes) {

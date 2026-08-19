@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Plus, Trash2, CheckSquare, Square } from "lucide-react";
+import { Trash2, CheckSquare, Square } from "lucide-react";
 import { DEFAULT_CURRENCY, formatCurrencyAmount, type CurrencyRate } from "@/lib/currency";
 
 // 체크리스트 항목 타입 정의

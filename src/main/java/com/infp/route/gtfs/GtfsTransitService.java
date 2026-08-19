@@ -129,6 +129,7 @@ public class GtfsTransitService {
 
     private void loadStops(Path datasetDir) throws IOException {
         Path stopsFile = datasetDir.resolve("stops.txt");
+        Map<String, String> koreanStopNames = loadKoreanStopNames(datasetDir);
         try (BufferedReader reader = Files.newBufferedReader(stopsFile, StandardCharsets.UTF_8)) {
             List<String> header = parseCsvLine(reader.readLine());
             int idIdx = header.indexOf("stop_id");
@@ -147,10 +148,38 @@ public class GtfsTransitService {
                 double lat = parseDouble(get(row, latIdx));
                 double lon = parseDouble(get(row, lonIdx));
                 if (isValidCoordinate(lat, lon)) {
-                    stops.add(new StopRow(datasetScopedId(datasetDir, stopId), get(row, nameIdx), lat, lon));
+                    String localizedName = koreanStopNames.getOrDefault(stopId, get(row, nameIdx));
+                    stops.add(new StopRow(datasetScopedId(datasetDir, stopId), localizedName, lat, lon));
                 }
             }
         }
+    }
+
+    private Map<String, String> loadKoreanStopNames(Path datasetDir) throws IOException {
+        Path translationsFile = datasetDir.resolve("translations.txt");
+        if (!Files.isRegularFile(translationsFile)) return Map.of();
+
+        Map<String, String> names = new HashMap<>();
+        try (BufferedReader reader = Files.newBufferedReader(translationsFile, StandardCharsets.UTF_8)) {
+            List<String> header = parseCsvLine(reader.readLine());
+            int tableIdx = header.indexOf("table_name");
+            int recordIdx = header.indexOf("record_id");
+            int fieldIdx = header.indexOf("field_name");
+            int languageIdx = header.indexOf("language");
+            int translationIdx = header.indexOf("translation");
+
+            String line;
+            while ((line = reader.readLine()) != null) {
+                List<String> row = parseCsvLine(line);
+                if (!"stops".equalsIgnoreCase(get(row, tableIdx))
+                        || !"stop_name".equalsIgnoreCase(get(row, fieldIdx))
+                        || !"ko".equalsIgnoreCase(get(row, languageIdx))) continue;
+                String stopId = get(row, recordIdx);
+                String name = get(row, translationIdx);
+                if (!stopId.isBlank() && !name.isBlank()) names.putIfAbsent(stopId, name);
+            }
+        }
+        return names;
     }
 
     private void loadRoutesByStop(Path datasetDir) throws IOException {

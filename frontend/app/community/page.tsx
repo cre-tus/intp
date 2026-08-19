@@ -50,12 +50,17 @@ import {
     loadPopularCommunityPosts,
     loadSavedCommunityPosts,
     toggleCommunityPostLike,
+    toggleCommunityPostCommentLike,
     toggleCommunityPostSave,
     searchCommunityPosts,
     searchCommunityRegions,
     updateCommunityPost,
     updateCommunityPostComment,
-type CommunityImageKey,
+    uploadCommunityPostMedia,
+    isCommunityQnaPost,
+    normalizeCreatedCommunityPost,
+    forceCommunityQnaPost,
+    type CommunityImageKey,
     type CommunityComment,
     type CommunityPost,
     type CommunityPostPayload,
@@ -148,9 +153,9 @@ const samplePosts: CommunityPost[] = [
 ];
 
 const trendingTags = ["#도쿄카페", "#오사카맛집", "#혼행", "#가성비루트", "#겨울삿포로", "#주말여행"];
-const tabs = ["추천", "팔로잉", "인기", "지역"];
+const tabs = ["추천", "Q&A", "팔로잉", "인기", "지역"];
 const imageKeys: CommunityImageKey[] = ["tokyo", "osaka", "sapporo", "fukuoka", "nagoya"];
-type ComposerMode = "plan" | "photo";
+type ComposerMode = "plan" | "photo" | "qna";
 
 export default function CommunityPage() {
     const router = useRouter();
@@ -171,6 +176,7 @@ export default function CommunityPage() {
     const [feedback, setFeedback] = useState("");
     const [profileUserId, setProfileUserId] = useState<number | null>(null);
     const [popularTopPosts, setPopularTopPosts] = useState<CommunityPost[]>([]);
+    const [knownQnaPostIds, setKnownQnaPostIds] = useState<Set<number>>(() => new Set());
 
     useEffect(() => {
         void fetchMe();
@@ -184,40 +190,58 @@ export default function CommunityPage() {
     }, [isLoggedIn]);
 
     useEffect(() => {
+        const rawValue = window.localStorage.getItem("community:qnaPostIds");
+        if (!rawValue) return;
+        try {
+            const ids = JSON.parse(rawValue) as unknown;
+            if (Array.isArray(ids)) {
+                setKnownQnaPostIds(new Set(ids.filter((id): id is number => typeof id === "number")));
+            }
+        } catch {
+            window.localStorage.removeItem("community:qnaPostIds");
+        }
+    }, []);
+
+    useEffect(() => {
         loadPopularCommunityPosts()
             .then((items) => setPopularTopPosts(items.slice(0, 5)))
             .catch(() => setPopularTopPosts([]));
     }, [isLoggedIn]);
+
+    const applyKnownQnaPosts = useCallback((items: CommunityPost[]) => {
+        if (knownQnaPostIds.size === 0) return items;
+        return items.map((post) => knownQnaPostIds.has(post.id) ? forceCommunityQnaPost(post) : post);
+    }, [knownQnaPostIds]);
 
     const refreshFeed = useCallback(async () => {
         setLoading(true);
         try {
             const keyword = searchQuery.trim();
             if (keyword || (activeTab === "지역" && selectedRegion)) {
-                setPosts(await searchCommunityPosts({ q: keyword, region: selectedRegion }));
+                setPosts(applyKnownQnaPosts(await searchCommunityPosts({ q: keyword, region: selectedRegion })));
             } else if (activeTab === "팔로잉") {
                 if (isLoggedIn === false) {
                     setPosts([]);
                 } else {
-                    setPosts(await loadFollowingCommunityPosts());
+                    setPosts(applyKnownQnaPosts(await loadFollowingCommunityPosts()));
                 }
             } else if (activeTab === "인기") {
-                setPosts(await loadPopularCommunityPosts());
+                setPosts(applyKnownQnaPosts(await loadPopularCommunityPosts()));
             } else if (activeTab === "저장") {
                 if (isLoggedIn === false) {
                     setPosts([]);
                 } else {
-                    setPosts(await loadSavedCommunityPosts());
+                    setPosts(applyKnownQnaPosts(await loadSavedCommunityPosts()));
                 }
             } else {
-                setPosts(await loadCommunityPosts());
+                setPosts(applyKnownQnaPosts(await loadCommunityPosts()));
             }
         } catch {
             setPosts([]);
         } finally {
             setLoading(false);
         }
-    }, [activeTab, isLoggedIn, searchQuery, selectedRegion]);
+    }, [activeTab, applyKnownQnaPosts, isLoggedIn, searchQuery, selectedRegion]);
 
     useEffect(() => {
         const timeoutId = window.setTimeout(() => {
@@ -236,12 +260,15 @@ export default function CommunityPage() {
         return () => window.clearTimeout(timeoutId);
     }, [activeTab, regionInput]);
 
+    const qnaCategoryActive = activeTab === "Q&A";
+    const categoryPosts = posts.filter((post) => qnaCategoryActive ? isCommunityQnaPost(post) : !isCommunityQnaPost(post));
     const shouldShowSampleFeed = activeTab === "추천" && !searchQuery.trim() && !selectedRegion;
-    const visiblePosts = posts.length > 0 ? posts : shouldShowSampleFeed ? samplePosts : [];
+    const visiblePosts = categoryPosts.length > 0 ? categoryPosts : shouldShowSampleFeed ? samplePosts : [];
     const isSampleFeed = posts.length === 0 && shouldShowSampleFeed;
     const regionChoices = [...apiRegions, ...customRegions].filter((region, index, regions) =>
         regions.findIndex((item) => item.toLowerCase() === region.toLowerCase()) === index
     );
+    const emptyMessage = activeTab === "Q&A" ? "아직 등록된 Q&A 질문이 없습니다." : "조건에 맞는 커뮤니티 글이 없습니다.";
 
     const updatePost = (postId: number, patch: Partial<CommunityPost>) => {
         setPosts((current) => current.map((post) => (post.id === postId ? { ...post, ...patch } : post)));
@@ -353,14 +380,34 @@ export default function CommunityPage() {
         setComposerOpen(true);
     };
 
+    const rememberQnaPostId = (postId: number) => {
+        if (postId <= 0) return;
+        setKnownQnaPostIds((current) => {
+            const next = new Set(current);
+            next.add(postId);
+            window.localStorage.setItem("community:qnaPostIds", JSON.stringify([...next]));
+            return next;
+        });
+    };
+
     const handleCreatePost = async (payload: CommunityPostPayload) => {
         try {
             if (editingPost) {
-                const updated = await updateCommunityPost(editingPost.id, payload);
+                const response = await updateCommunityPost(editingPost.id, payload);
+                const updated = normalizeCreatedCommunityPost(response, payload);
                 updatePost(editingPost.id, updated);
+                if (payload.postType === "qna") {
+                    rememberQnaPostId(updated.id);
+                    setActiveTab("Q&A");
+                }
             } else {
-                const created = await createCommunityPost(payload);
+                const response = await createCommunityPost(payload);
+                const created = normalizeCreatedCommunityPost(response, payload);
                 setPosts((current) => [created, ...current]);
+                if (isCommunityQnaPost(created) || payload.postType === "qna") {
+                    rememberQnaPostId(created.id);
+                    setActiveTab("Q&A");
+                }
             }
             setEditingPost(null);
             setComposerOpen(false);
@@ -372,7 +419,7 @@ export default function CommunityPage() {
     const handleEdit = (post: CommunityPost) => {
         setNotice("");
         setEditingPost(post);
-        setComposerMode(post.planId ? "plan" : "photo");
+        setComposerMode(isCommunityQnaPost(post) ? "qna" : post.planId ? "plan" : "photo");
         setComposerOpen(true);
     };
 
@@ -396,6 +443,16 @@ export default function CommunityPage() {
                             >
                                 여행 피드
                                 {activeTab === "추천" && <span className="h-2 w-2 rounded-full bg-emerald-400" />}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setActiveTab("Q&A")}
+                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
+                                    activeTab === "Q&A" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-50 hover:text-gray-950"
+                                }`}
+                            >
+                                Q&A
+                                {activeTab === "Q&A" && <span className="h-2 w-2 rounded-full bg-white" />}
                             </button>
                             <Link
                                 href="/community/me"
@@ -456,9 +513,10 @@ export default function CommunityPage() {
                                 내 여행 계획을 공유해보세요
                             </button>
                         </div>
-                        <div className="mt-4 grid grid-cols-3 gap-2">
+                        <div className="mt-4 grid grid-cols-4 gap-2">
                             <ComposerAction icon={<Plus className="h-4 w-4" />} label="계획 공유" onClick={() => openComposer("plan")} />
                             <ComposerAction icon={<Camera className="h-4 w-4" />} label="사진" onClick={() => openComposer("photo")} />
+                            <ComposerAction icon={<MessageCircle className="h-4 w-4" />} label="Q&A" onClick={() => openComposer("qna")} />
                             <ComposerAction icon={<Users className="h-4 w-4" />} label="동행 모집" onClick={() => openComposer("plan")} />
                         </div>
                         {isSampleFeed && !loading && (
@@ -562,13 +620,28 @@ export default function CommunityPage() {
                         </section>
                     )}
 
+                    {activeTab === "Q&A" && (
+                        <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                            <div>
+                                <div>
+                                    <div className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-700">
+                                        <MessageCircle className="h-3.5 w-3.5" />
+                                        Q&A
+                                    </div>
+                                    <h2 className="mt-2 text-lg font-black text-gray-950">여행 질문 게시판</h2>
+                                    <p className="mt-1 text-sm font-semibold text-gray-500">일정, 예산, 이동, 동행 고민을 질문하고 답변을 모아봅니다.</p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
+
                     {loading ? (
                         <div className="rounded-xl border border-gray-200 bg-white px-5 py-10 text-center text-sm font-bold text-gray-500 shadow-sm">
                             커뮤니티 피드를 불러오는 중입니다.
                         </div>
                     ) : visiblePosts.length === 0 ? (
                         <div className="rounded-xl border border-gray-200 bg-white px-5 py-10 text-center text-sm font-bold text-gray-500 shadow-sm">
-                            조건에 맞는 커뮤니티 글이 없습니다.
+                            {emptyMessage}
                         </div>
                     ) : (
                         visiblePosts.map((post) => (
@@ -585,6 +658,7 @@ export default function CommunityPage() {
                                 isLoggedIn={isLoggedIn === true}
                                 onRequireLogin={() => router.push("/login")}
                                 onCommentCountChange={(count) => updatePost(post.id, { comments: count })}
+                                qnaBoard={activeTab === "Q&A"}
                             />
                         ))
                     )}
@@ -638,6 +712,7 @@ function FeedCard({
     isLoggedIn,
     onRequireLogin,
     onCommentCountChange,
+    qnaBoard = false,
 }: {
     post: CommunityPost;
     onLike: () => void;
@@ -650,8 +725,9 @@ function FeedCard({
     isLoggedIn: boolean;
     onRequireLogin: () => void;
     onCommentCountChange: (count: number) => void;
+    qnaBoard?: boolean;
 }) {
-    const [commentsOpen, setCommentsOpen] = useState(false);
+    const [commentsOpen, setCommentsOpen] = useState(qnaBoard);
     const [comments, setComments] = useState<CommunityComment[]>([]);
     const [commentText, setCommentText] = useState("");
     const [commentsLoading, setCommentsLoading] = useState(false);
@@ -662,6 +738,18 @@ function FeedCard({
     const [editingCommentText, setEditingCommentText] = useState("");
     const [editingCommentSubmitting, setEditingCommentSubmitting] = useState(false);
     const [planOpen, setPlanOpen] = useState(false);
+    const [answerSort, setAnswerSort] = useState<"top" | "new" | "old">("top");
+    const isQnaPost = isCommunityQnaPost(post);
+    const qnaAnswers = useMemo(() => {
+        return [...comments].sort((left, right) => {
+            if (answerSort === "top") {
+                return right.likes - left.likes || new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+            }
+            const leftTime = new Date(left.createdAt).getTime();
+            const rightTime = new Date(right.createdAt).getTime();
+            return answerSort === "new" ? rightTime - leftTime : leftTime - rightTime;
+        });
+    }, [answerSort, comments]);
 
     const loadComments = useCallback(async () => {
         if (post.id < 0 || comments.length > 0) return;
@@ -672,6 +760,11 @@ function FeedCard({
             setCommentsLoading(false);
         }
     }, [comments.length, post.id]);
+
+    useEffect(() => {
+        if (!qnaBoard || !isQnaPost) return;
+        void loadComments();
+    }, [isQnaPost, loadComments, qnaBoard]);
 
     const openComments = async () => {
         const nextOpen = !commentsOpen;
@@ -738,6 +831,285 @@ function FeedCard({
         });
         setCommentMenuId(null);
     };
+
+    const toggleAnswerLike = async (commentId: number) => {
+        if (!isLoggedIn) {
+            onRequireLogin();
+            return;
+        }
+        const reaction = await toggleCommunityPostCommentLike(post.id, commentId);
+        setComments((current) => current.map((comment) => comment.id === commentId
+            ? { ...comment, liked: reaction.active, likes: reaction.count }
+            : comment));
+    };
+
+    if (isQnaPost) {
+        return (
+            <article className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 p-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <button type="button" onClick={onOpenProfile} className="shrink-0 rounded-full text-left focus:outline-none focus:ring-2 focus:ring-gray-950/20">
+                            <Avatar value={post.avatar} size="md" />
+                        </button>
+                        <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={onOpenProfile}
+                                    className="truncate text-left text-sm font-bold text-gray-950 transition hover:text-gray-700"
+                                >
+                                    {post.author}
+                                </button>
+                                {!post.ownPost && (
+                                    <button className="shrink-0 text-sm font-black text-gray-950 transition hover:text-gray-700" onClick={onFollow} type="button">
+                                        {post.followingAuthor ? "팔로잉" : "팔로우"}
+                                    </button>
+                                )}
+                            </div>
+                            <div className="truncate text-xs font-medium text-gray-500">
+                                {post.handle} · {relativeTime(post.createdAt)}
+                            </div>
+                        </div>
+                    </div>
+                    {post.ownPost && post.id > 0 && (
+                        <div className="flex shrink-0 gap-1">
+                            <button type="button" onClick={onEdit} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-950" aria-label="질문 수정">
+                                <Pencil className="h-4 w-4" />
+                            </button>
+                            <button type="button" onClick={onDelete} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-red-500 hover:bg-red-50 hover:text-red-600" aria-label="질문 삭제">
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-5">
+                    <div className="min-w-0 space-y-4">
+                        <div>
+                            <div className="mb-3 flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-700">
+                                    <MessageCircle className="h-3.5 w-3.5" />
+                                    Q&A
+                                </span>
+                                {post.comments > 0 ? (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-950 px-3 py-1 text-xs font-black text-white">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        답변 있음
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-black text-gray-500 ring-1 ring-gray-200">
+                                        <Clock className="h-3.5 w-3.5" />
+                                        답변 대기
+                                    </span>
+                                )}
+                            </div>
+                            <h1 className="text-xl font-black leading-tight text-gray-950">{post.title || "질문"}</h1>
+                            {post.city && <p className="mt-2 text-sm font-bold text-gray-500">관련 지역: {post.city}</p>}
+                        </div>
+
+                        <section className="border-y border-gray-200 py-4">
+                            <div className="text-xs font-black uppercase text-gray-500">Question</div>
+                            <p className="mt-2 whitespace-pre-line text-sm font-semibold leading-6 text-gray-950">
+                                {post.questionDetail || post.caption}
+                            </p>
+                        </section>
+
+                        <QnaMedia post={post} />
+
+                        {(post.attempted || post.answerPreference) && (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                {post.attempted && (
+                                    <section className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                        <div className="text-xs font-black text-gray-500">이미 찾아본 것</div>
+                                        <p className="mt-1 whitespace-pre-line text-sm font-medium leading-6 text-gray-800">{post.attempted}</p>
+                                    </section>
+                                )}
+                                {post.answerPreference && (
+                                    <section className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                        <div className="text-xs font-black text-gray-500">원하는 답변</div>
+                                        <p className="mt-1 text-sm font-bold leading-6 text-gray-800">{post.answerPreference}</p>
+                                    </section>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="flex flex-wrap gap-2">
+                            {post.tags.map((tag) => (
+                                <span key={tag} className="text-sm font-bold text-gray-600">#{tag}</span>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-gray-200 pt-3">
+                            <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                                <SocialButton icon={<MessageCircle className="h-5 w-5" />} label={`답변 ${post.comments}`} onClick={() => void openComments()} />
+                                <SocialButton active={post.saved} icon={<Bookmark className="h-5 w-5" />} label={`나도 알고싶어요 ${post.saves}`} onClick={onSave} />
+                            </div>
+                            <SocialButton icon={<Share2 className="h-5 w-5" />} label="공유" onClick={onShare} />
+                        </div>
+
+                        {commentsOpen && (
+                        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-inner">
+                            <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <div className="text-sm font-black text-gray-950">답변 {comments.length}</div>
+                                    <p className="mt-1 text-xs font-bold text-gray-500">질문에 맞는 경험과 근거를 남겨주세요.</p>
+                                </div>
+                                 <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setAnswerSort("top")}
+                                        className={`rounded-md px-2.5 py-1 text-xs font-black transition ${answerSort === "top" ? "bg-white text-gray-950 shadow-sm" : "text-gray-500 hover:text-gray-950"}`}
+                                    >
+                                        추천순
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAnswerSort("new")}
+                                        className={`rounded-md px-2.5 py-1 text-xs font-black transition ${answerSort === "new" ? "bg-white text-gray-950 shadow-sm" : "text-gray-500 hover:text-gray-950"}`}
+                                    >
+                                        최신순
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAnswerSort("old")}
+                                        className={`rounded-md px-2.5 py-1 text-xs font-black transition ${answerSort === "old" ? "bg-white text-gray-950 shadow-sm" : "text-gray-500 hover:text-gray-950"}`}
+                                    >
+                                        오래된순
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="space-y-3">
+                                {commentsLoading ? (
+                                    <p className="text-sm font-bold text-gray-500">답변을 불러오는 중입니다.</p>
+                                ) : qnaAnswers.length === 0 ? (
+                                    <p className="text-sm font-bold text-gray-500">아직 답변이 없습니다.</p>
+                                ) : (
+                                    qnaAnswers.map((comment) => (
+                                        <article key={comment.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                                            {(() => {
+                                                const reaction = { liked: comment.liked, count: comment.likes };
+                                                return (
+                                            <div className="flex items-start gap-3">
+                                                <Avatar value={comment.avatar} size="sm" />
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                                                <span className="font-black text-gray-950">{comment.author}</span>
+                                                                <span className="font-bold text-gray-400">{relativeTime(comment.createdAt)}</span>
+                                                                {comment.edited && <span className="font-bold text-gray-400">수정됨</span>}
+                                                            </div>
+                                                            {editingCommentId === comment.id ? (
+                                                                <div className="mt-2 space-y-2">
+                                                                    <textarea
+                                                                        value={editingCommentText}
+                                                                        onChange={(event) => setEditingCommentText(event.target.value)}
+                                                                        className="min-h-24 w-full resize-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-950/20"
+                                                                    />
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void submitEditComment(comment.id)}
+                                                                            disabled={editingCommentSubmitting || !editingCommentText.trim()}
+                                                                            className="rounded-md bg-gray-950 px-3 py-1.5 text-xs font-black text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                                                                        >
+                                                                            저장
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setEditingCommentId(null);
+                                                                                setEditingCommentText("");
+                                                                            }}
+                                                                            className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-black text-gray-600 hover:bg-gray-50"
+                                                                        >
+                                                                            취소
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-gray-800">{comment.content}</p>
+                                                            )}
+                                                            {editingCommentId !== comment.id && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => void toggleAnswerLike(comment.id)}
+                                                                    className={`mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-black transition ${
+                                                                        reaction.liked
+                                                                            ? "bg-gray-950 text-white"
+                                                                            : "bg-white text-gray-600 ring-1 ring-gray-200 hover:text-gray-950 hover:ring-gray-400"
+                                                                    }`}
+                                                                    aria-label="답변 좋아요"
+                                                                >
+                                                                    <Heart className="h-3.5 w-3.5" />
+                                                                    좋아요 {reaction.count}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        {comment.ownComment && editingCommentId !== comment.id && (
+                                                            <div className="relative shrink-0">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCommentMenuId((current) => (current === comment.id ? null : comment.id))}
+                                                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-white hover:text-gray-950"
+                                                                    aria-label="답변 메뉴"
+                                                                >
+                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                </button>
+                                                                {commentMenuId === comment.id && (
+                                                                    <div className="absolute right-0 top-8 z-20 w-28 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => startEditComment(comment)}
+                                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-bold text-gray-700 hover:bg-gray-50 hover:text-gray-950"
+                                                                        >
+                                                                            <Pencil className="h-3.5 w-3.5" />
+                                                                            수정
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => void deleteComment(comment.id)}
+                                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-bold text-red-600 hover:bg-red-50"
+                                                                        >
+                                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                                            삭제
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                                );
+                                            })()}
+                                        </article>
+                                    ))
+                                )}
+                            </div>
+                            <div className="mt-4 space-y-2">
+                                <textarea
+                                    value={commentText}
+                                    onChange={(event) => setCommentText(event.target.value)}
+                                    className="min-h-28 w-full resize-none rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-950/20"
+                                    placeholder="답변을 남겨주세요. 실제 경험, 추천 이유, 주의할 점을 함께 적으면 좋아요."
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => void submitComment()}
+                                    disabled={commentSubmitting || !commentText.trim()}
+                                    className="inline-flex w-full justify-center rounded-lg bg-gray-950 px-3 py-2.5 text-sm font-black text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    답변 등록
+                                </button>
+                            </div>
+                        </div>
+                        )}
+                    </div>
+                </div>
+            </article>
+        );
+    }
 
     return (
         <article className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -812,6 +1184,7 @@ function FeedCard({
                 </div>
             </div>
 
+            {!isQnaPost && (
             <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-100">
                 <Image src={post.imageUrl || imageMap[post.imageKey] || tokyo} alt={post.city ? `${post.city} 여행 이미지` : "커뮤니티 사진"} fill className="object-cover" sizes="(max-width: 1024px) 100vw, 680px" />
                 {post.planId && post.city && (
@@ -820,6 +1193,7 @@ function FeedCard({
                 </div>
                 )}
             </div>
+            )}
 
             <div className="space-y-4 p-4">
                 <div className="flex items-start justify-between gap-3">
@@ -868,13 +1242,57 @@ function FeedCard({
                 </div>
 
                 {planOpen && post.id > 0 && (
-                    <InlinePlanPreview
-                        postId={post.id}
-                        isLoggedIn={isLoggedIn}
-                        canCopy={!post.ownPost}
-                        onRequireLogin={onRequireLogin}
-                        onClose={() => setPlanOpen(false)}
-                    />
+                    <div
+                        className="fixed inset-0 z-[90] bg-black/60 px-3 py-4 backdrop-blur-sm sm:px-6 sm:py-6"
+                        role="dialog"
+                        aria-modal="true"
+                        onMouseDown={(event) => {
+                            if (event.target === event.currentTarget) setPlanOpen(false);
+                        }}
+                    >
+                        <section className="mx-auto flex h-full w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+                            <div className="flex items-start justify-between gap-4 border-b border-gray-200 bg-white px-4 py-4 sm:px-6">
+                                <div className="min-w-0">
+                                    <p className="text-xs font-black uppercase tracking-wide text-blue-600">공유 여행 계획</p>
+                                    <h2 className="mt-1 truncate text-xl font-black text-gray-950 sm:text-2xl">
+                                        {post.title || "여행 계획"}
+                                    </h2>
+                                    <p className="mt-1 text-sm font-semibold text-gray-500">
+                                        댓글을 보면서 계획을 크게 확인할 수 있습니다.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setPlanOpen(false)}
+                                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:border-gray-300 hover:bg-gray-50 hover:text-gray-950"
+                                    aria-label="계획 닫기"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+                            <div className="min-h-0 flex-1 overflow-y-auto bg-gray-50 p-3 sm:p-5">
+                                <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+                                    <div className="min-w-0">
+                                        <InlinePlanPreview
+                                            postId={post.id}
+                                            isLoggedIn={isLoggedIn}
+                                            canCopy={!post.ownPost}
+                                            onRequireLogin={onRequireLogin}
+                                            onClose={() => setPlanOpen(false)}
+                                        />
+                                    </div>
+                                    <PlanModalComments
+                                        comments={comments}
+                                        commentText={commentText}
+                                        commentsLoading={commentsLoading}
+                                        commentSubmitting={commentSubmitting}
+                                        onCommentTextChange={setCommentText}
+                                        onSubmitComment={() => void submitComment()}
+                                    />
+                                </div>
+                            </div>
+                        </section>
+                    </div>
                 )}
 
                 <div className="flex items-center justify-between border-t border-gray-200 pt-3">
@@ -1002,6 +1420,78 @@ function FeedCard({
                 )}
             </div>
         </article>
+    );
+}
+
+function PlanModalComments({
+    comments,
+    commentText,
+    commentsLoading,
+    commentSubmitting,
+    onCommentTextChange,
+    onSubmitComment,
+}: {
+    comments: CommunityComment[];
+    commentText: string;
+    commentsLoading: boolean;
+    commentSubmitting: boolean;
+    onCommentTextChange: (value: string) => void;
+    onSubmitComment: () => void;
+}) {
+    return (
+        <aside className="flex min-h-[360px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm xl:sticky xl:top-0 xl:max-h-[calc(100vh-150px)]">
+            <div className="border-b border-gray-200 px-4 py-3">
+                <h3 className="text-sm font-black text-gray-950">댓글</h3>
+                <p className="mt-1 text-xs font-semibold text-gray-500">계획을 보면서 바로 의견을 남길 수 있습니다.</p>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-gray-50 p-3">
+                {commentsLoading ? (
+                    <div className="flex min-h-40 items-center justify-center gap-2 text-sm font-bold text-gray-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        댓글을 불러오는 중입니다.
+                    </div>
+                ) : comments.length === 0 ? (
+                    <div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-gray-200 bg-white px-4 text-center text-sm font-bold text-gray-500">
+                        아직 댓글이 없습니다.
+                    </div>
+                ) : (
+                    comments.map((comment) => (
+                        <div key={comment.id} className="flex gap-2">
+                            <Avatar value={comment.avatar} size="sm" />
+                            <div className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 shadow-sm">
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                    <span className="font-black text-gray-950">{comment.author}</span>
+                                    {comment.edited && <span className="font-bold text-gray-400">수정됨</span>}
+                                </div>
+                                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-gray-700">{comment.content}</p>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+            <div className="border-t border-gray-200 bg-white p-3">
+                <div className="flex gap-2">
+                    <input
+                        value={commentText}
+                        onChange={(event) => onCommentTextChange(event.target.value)}
+                        onKeyDown={(event) => {
+                            if (event.key === "Enter") onSubmitComment();
+                        }}
+                        className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-bold text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        placeholder="댓글 입력"
+                        type="text"
+                    />
+                    <button
+                        type="button"
+                        onClick={onSubmitComment}
+                        disabled={commentSubmitting || !commentText.trim()}
+                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        등록
+                    </button>
+                </div>
+            </div>
+        </aside>
     );
 }
 
@@ -1164,7 +1654,7 @@ function InlineReadonlyPlan({
             </div>
 
             <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-                <div className="max-h-[520px] space-y-3 overflow-auto pr-1">
+                <div className="max-h-[calc(100vh-270px)] space-y-3 overflow-auto pr-1">
                     {plan.days.length === 0 ? (
                         <InlineEmpty title="공개된 일정이 없습니다." />
                     ) : (
@@ -1288,7 +1778,7 @@ function displayPlanText(value: string | undefined, fallback: string) {
 }
 
 function planTemplateLabel(template: TravelPlanDraft["template"]) {
-    if (template === "spreadsheet") return "일정표형";
+    if (template === "spreadsheet") return "테이블형";
     if (template === "timeline") return "트립 보드";
     if (template === "route_sheet") return "루트 시트";
     return "기본형";
@@ -1310,7 +1800,7 @@ function RightRail({
     onAddRegion: () => void;
 }) {
     const recommendedPlans = useMemo(() => {
-        return [...popularPosts]
+        return popularPosts.filter((post) => post.planId)
             .sort((left, right) => {
                 const leftScore = left.likes * 3 + left.saves * 2 + left.comments;
                 const rightScore = right.likes * 3 + right.saves * 2 + right.comments;
@@ -1415,13 +1905,23 @@ function CommunityComposer({
         budget: "",
         imageKey: "tokyo" as CommunityImageKey,
         imageUrl: "",
+        mediaType: "" as "" | "image" | "video",
+        mediaUrl: "",
+        mediaOriginalFilename: "",
+        mediaMimeType: "",
+        mediaSizeBytes: "",
+        mediaDurationSeconds: "",
         caption: "",
+        questionDetail: "",
+        attempted: "",
+        answerPreference: "",
         tags: "",
         route: "",
     });
 
-    const effectiveMode: ComposerMode = editingPost ? (editingPost.planId ? "plan" : "photo") : mode;
+    const effectiveMode: ComposerMode = editingPost ? (editingPost.postType === "qna" ? "qna" : editingPost.planId ? "plan" : "photo") : mode;
     const isPlanMode = effectiveMode === "plan";
+    const isQnaMode = effectiveMode === "qna";
     const selectedPlan = plans.find((plan) => plan.id === form.planId);
 
     useEffect(() => {
@@ -1434,7 +1934,16 @@ function CommunityComposer({
             budget: "",
             imageKey: "tokyo",
             imageUrl: "",
+            mediaType: "",
+            mediaUrl: "",
+            mediaOriginalFilename: "",
+            mediaMimeType: "",
+            mediaSizeBytes: "",
+            mediaDurationSeconds: "",
             caption: "",
+            questionDetail: "",
+            attempted: "",
+            answerPreference: "",
             tags: "",
             route: "",
         });
@@ -1450,7 +1959,16 @@ function CommunityComposer({
             budget: editingPost.budget,
             imageKey: editingPost.imageKey,
             imageUrl: editingPost.imageUrl ?? "",
+            mediaType: editingPost.mediaType ?? "",
+            mediaUrl: editingPost.mediaUrl ?? "",
+            mediaOriginalFilename: editingPost.mediaOriginalFilename ?? "",
+            mediaMimeType: editingPost.mediaMimeType ?? "",
+            mediaSizeBytes: editingPost.mediaSizeBytes ? String(editingPost.mediaSizeBytes) : "",
+            mediaDurationSeconds: editingPost.mediaDurationSeconds ? String(editingPost.mediaDurationSeconds) : "",
             caption: editingPost.caption,
+            questionDetail: editingPost.questionDetail ?? "",
+            attempted: editingPost.attempted ?? "",
+            answerPreference: editingPost.answerPreference ?? "",
             tags: editingPost.tags.join(","),
             route: editingPost.route.join(","),
         });
@@ -1483,19 +2001,71 @@ function CommunityComposer({
         reader.readAsDataURL(file);
     };
 
+    const handleQnaMedia = async (file?: File) => {
+        if (!file) return;
+        const mediaType = file.type.startsWith("video/") ? "video" : file.type.startsWith("image/") ? "image" : "";
+        if (!mediaType) {
+            window.alert("사진 또는 동영상 파일만 올릴 수 있습니다.");
+            return;
+        }
+        if (file.size > 80 * 1024 * 1024) {
+            window.alert("Q&A 미디어는 80MB 이하 파일만 올릴 수 있습니다.");
+            return;
+        }
+
+        let durationSeconds: number | null = null;
+        try {
+            durationSeconds = mediaType === "video" ? await readVideoDuration(file) : null;
+        } catch {
+            window.alert("동영상 길이를 확인하지 못했습니다.");
+            return;
+        }
+        if (durationSeconds !== null && durationSeconds >= 300) {
+            window.alert("동영상은 5분 미만만 업로드할 수 있습니다.");
+            return;
+        }
+
+        try {
+            const uploaded = await uploadCommunityPostMedia(file, durationSeconds);
+            setForm((current) => ({
+                ...current,
+                imageKey: "tokyo",
+                imageUrl: uploaded.mediaType === "image" ? uploaded.mediaUrl : "",
+                mediaType: uploaded.mediaType,
+                mediaUrl: uploaded.mediaUrl,
+                mediaOriginalFilename: uploaded.originalFilename ?? file.name,
+                mediaMimeType: uploaded.mimeType ?? file.type,
+                mediaSizeBytes: String(uploaded.sizeBytes),
+                mediaDurationSeconds: uploaded.durationSeconds ? String(uploaded.durationSeconds) : "",
+            }));
+        } catch {
+            window.alert("미디어 업로드에 실패했습니다.");
+        }
+    };
+
     const submit = async () => {
         if (isPlanMode && !form.planId) return;
         setSubmitting(true);
         try {
             await onSubmit({
+                postType: effectiveMode,
                 planId: isPlanMode ? form.planId : undefined,
                 title: isPlanMode ? form.title || selectedPlan?.title || "" : form.title,
-                city: isPlanMode ? form.city : "",
+                city: isPlanMode || isQnaMode ? form.city : "",
                 duration: isPlanMode ? form.duration : "",
                 budget: isPlanMode ? form.budget : "",
                 imageKey: form.imageKey,
                 imageUrl: form.imageUrl || null,
-                caption: form.caption,
+                mediaType: isQnaMode ? form.mediaType || null : null,
+                mediaUrl: isQnaMode ? form.mediaUrl || null : null,
+                mediaOriginalFilename: isQnaMode ? form.mediaOriginalFilename || null : null,
+                mediaMimeType: isQnaMode ? form.mediaMimeType || null : null,
+                mediaSizeBytes: isQnaMode && form.mediaSizeBytes ? Number(form.mediaSizeBytes) : null,
+                mediaDurationSeconds: isQnaMode && form.mediaDurationSeconds ? Number(form.mediaDurationSeconds) : null,
+                caption: isQnaMode ? form.questionDetail : form.caption,
+                questionDetail: isQnaMode ? form.questionDetail : null,
+                attempted: isQnaMode ? form.attempted : null,
+                answerPreference: isQnaMode ? form.answerPreference : null,
                 tags: splitList(form.tags),
                 route: splitList(form.route),
             });
@@ -1509,8 +2079,8 @@ function CommunityComposer({
             <div className="max-h-full w-full max-w-2xl overflow-auto rounded-2xl bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
                     <div>
-                        <h2 className="text-xl font-black text-gray-950">{editingPost ? "피드 수정" : isPlanMode ? "여행 계획 공유" : "사진 글쓰기"}</h2>
-                        <p className="mt-1 text-sm text-gray-500">{editingPost ? "커뮤니티 피드 내용을 수정합니다." : isPlanMode ? "내 계획을 커뮤니티 피드에 올립니다." : "사진과 글만 가볍게 커뮤니티에 올립니다."}</p>
+                        <h2 className="text-xl font-black text-gray-950">{editingPost ? "피드 수정" : isPlanMode ? "여행 계획 공유" : isQnaMode ? "Q&A 질문 작성" : "사진 글쓰기"}</h2>
+                        <p className="mt-1 text-sm text-gray-500">{editingPost ? "커뮤니티 피드 내용을 수정합니다." : isPlanMode ? "내 계획을 커뮤니티 피드에 올립니다." : isQnaMode ? "여행 준비 중 궁금한 점을 질문 형식으로 올립니다." : "사진과 글만 가볍게 커뮤니티에 올립니다."}</p>
                     </div>
                     <button type="button" onClick={onClose} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-950">
                         <X className="h-5 w-5" />
@@ -1541,7 +2111,7 @@ function CommunityComposer({
                     )}
 
                     <Field label="제목">
-                        <input value={form.title} onChange={(event) => update("title", event.target.value)} className="community-input" placeholder={isPlanMode ? "예: 도쿄 3박 4일 카페 루트" : "제목 없이 올릴 수 있습니다"} />
+                        <input value={form.title} onChange={(event) => update("title", event.target.value)} className="community-input" placeholder={isPlanMode ? "예: 도쿄 3박 4일 카페 루트" : isQnaMode ? "예: 오사카 2박 3일 교통패스 뭐가 좋을까요?" : "제목 없이 올릴 수 있습니다"} />
                     </Field>
 
                     {isPlanMode && (
@@ -1558,6 +2128,13 @@ function CommunityComposer({
                     </div>
                     )}
 
+                    {isQnaMode && (
+                    <Field label="관련 지역">
+                        <input value={form.city} onChange={(event) => update("city", event.target.value)} className="community-input" placeholder="예: 오사카, 제주, 삿포로" />
+                    </Field>
+                    )}
+
+                    {!isQnaMode && (
                     <Field label="대표 이미지">
                         <div className="grid grid-cols-5 gap-2">
                             <label
@@ -1592,7 +2169,9 @@ function CommunityComposer({
                             ))}
                         </div>
                     </Field>
+                    )}
 
+                    {!isQnaMode && (
                     <Field label="소개">
                         <textarea
                             value={form.caption}
@@ -1601,6 +2180,82 @@ function CommunityComposer({
                             placeholder="이 계획의 핵심 포인트, 추천 대상, 주의할 점을 적어주세요."
                         />
                     </Field>
+                    )}
+
+                    {isQnaMode && (
+                    <div className="grid gap-3">
+                        <Field label="질문 내용">
+                            <textarea
+                                value={form.questionDetail}
+                                onChange={(event) => update("questionDetail", event.target.value)}
+                                className="community-input min-h-32 resize-none"
+                                placeholder="궁금한 점을 구체적으로 적어주세요. 일정, 예산, 동행, 이동 조건을 같이 적으면 답변받기 좋아요."
+                            />
+                        </Field>
+                        <Field label="이미 찾아본 것">
+                            <textarea
+                                value={form.attempted}
+                                onChange={(event) => update("attempted", event.target.value)}
+                                className="community-input min-h-20 resize-none"
+                                placeholder="비워도 됩니다. 비교해본 선택지나 고민한 이유를 적어주세요."
+                            />
+                        </Field>
+                        <Field label="원하는 답변">
+                            <input
+                                value={form.answerPreference}
+                                onChange={(event) => update("answerPreference", event.target.value)}
+                                className="community-input"
+                                placeholder="예: 현지 경험 위주, 예산 기준, 아이 동반 기준"
+                            />
+                        </Field>
+                        <Field label="사진/동영상">
+                            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+                                {form.mediaType === "video" && form.mediaUrl ? (
+                                    <video src={form.mediaUrl} controls className="max-h-72 w-full rounded-lg bg-black object-contain" />
+                                ) : form.imageUrl ? (
+                                    <div className="relative aspect-video overflow-hidden rounded-lg bg-gray-100">
+                                        <Image src={form.imageUrl} alt="Q&A 첨부 사진" fill unoptimized className="object-cover" sizes="(max-width: 768px) 100vw, 640px" />
+                                    </div>
+                                ) : (
+                                    <div className="flex min-h-32 items-center justify-center text-sm font-bold text-gray-500">
+                                        질문에 필요한 사진이나 짧은 동영상을 추가할 수 있습니다.
+                                    </div>
+                                )}
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-gray-950 px-3 py-2 text-xs font-black text-white transition hover:bg-black">
+                                        <ImagePlus className="h-4 w-4" />
+                                        파일 선택
+                                        <input
+                                            className="sr-only"
+                                            type="file"
+                                            accept="image/*,video/*"
+                                            onChange={(event) => void handleQnaMedia(event.target.files?.[0])}
+                                        />
+                                    </label>
+                                    {(form.imageUrl || form.mediaUrl) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setForm((current) => ({
+                                                ...current,
+                                                imageUrl: "",
+                                                mediaType: "",
+                                                mediaUrl: "",
+                                                mediaOriginalFilename: "",
+                                                mediaMimeType: "",
+                                                mediaSizeBytes: "",
+                                                mediaDurationSeconds: "",
+                                            }))}
+                                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-black text-gray-700 transition hover:border-gray-950 hover:text-gray-950"
+                                        >
+                                            <X className="h-4 w-4" />
+                                            삭제
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </Field>
+                    </div>
+                    )}
 
                     <div className={isPlanMode ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
                         <Field label="태그">
@@ -1617,12 +2272,12 @@ function CommunityComposer({
 
                     <button
                         type="button"
-                        disabled={submitting || (isPlanMode && plans.length === 0)}
+                        disabled={submitting || (isPlanMode && plans.length === 0) || (isQnaMode && (!form.title.trim() || !form.questionDetail.trim()))}
                         onClick={() => void submit()}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-950 px-4 py-3 text-sm font-black text-white transition hover:bg-black disabled:cursor-wait disabled:opacity-60"
                     >
                         <Send className="h-4 w-4" />
-                            {submitting ? (editingPost ? "수정 중" : "게시 중") : (editingPost ? "수정 완료" : isPlanMode ? "커뮤니티에 공유" : "사진 글 게시")}
+                            {submitting ? (editingPost ? "수정 중" : "게시 중") : (editingPost ? "수정 완료" : isPlanMode ? "커뮤니티에 공유" : isQnaMode ? "질문 게시" : "사진 글 게시")}
                     </button>
                 </div>
             </div>
@@ -1637,6 +2292,23 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
             {children}
         </label>
     );
+}
+
+function readVideoDuration(file: File) {
+    return new Promise<number>((resolve, reject) => {
+        const video = document.createElement("video");
+        const objectUrl = URL.createObjectURL(file);
+        video.preload = "metadata";
+        video.onloadedmetadata = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(video.duration);
+        };
+        video.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("동영상 길이를 확인하지 못했습니다."));
+        };
+        video.src = objectUrl;
+    });
 }
 
 function ComposerAction({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
@@ -1656,8 +2328,8 @@ function Avatar({ value, size }: { value: string; size: "sm" | "md" | "lg" }) {
     const dimension = size === "lg" ? "h-20 w-20 text-2xl ring-4 ring-white/25" : size === "md" ? "h-11 w-11 text-sm" : "h-8 w-8 text-xs";
     const isImage = value?.startsWith("data:image/") || value?.startsWith("http://") || value?.startsWith("https://");
     return (
-        <div className={`flex ${dimension} shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 font-black text-white`}>
-            {isImage ? <img src={value} alt="프로필 사진" className="h-full w-full object-cover" /> : value}
+        <div className={`relative flex ${dimension} shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-900 font-black text-white`}>
+            {isImage ? <Image src={value} alt="프로필 사진" fill sizes="80px" unoptimized className="object-cover" /> : value}
         </div>
     );
 }
@@ -1686,6 +2358,24 @@ function SocialButton({ active = false, icon, label, onClick }: { active?: boole
             {icon}
             <span>{label}</span>
         </button>
+    );
+}
+
+function QnaMedia({ post }: { post: CommunityPost }) {
+    if (post.mediaType === "video" && post.mediaUrl) {
+        return (
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-black">
+                <video src={post.mediaUrl} controls className="max-h-[520px] w-full object-contain" />
+            </div>
+        );
+    }
+
+    const imageUrl = post.imageUrl;
+    if (!imageUrl) return null;
+    return (
+        <div className="relative aspect-video overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+            <Image src={imageUrl} alt={post.title || "Q&A 첨부 사진"} fill unoptimized className="object-cover" sizes="(max-width: 1024px) 100vw, 680px" />
+        </div>
     );
 }
 
@@ -1857,6 +2547,29 @@ function ProfileTab({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 function ProfilePostCard({ post, onClose }: { post: CommunityPost; onClose: () => void }) {
+    if (isCommunityQnaPost(post)) {
+        return (
+            <article className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-black text-gray-700">
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Q&A
+                </div>
+                <h3 className="line-clamp-2 text-sm font-black leading-5 text-gray-950">{post.title || "질문"}</h3>
+                <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm font-medium leading-5 text-gray-700">
+                    {post.questionDetail || post.caption}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                    {post.tags.slice(0, 4).map((tag) => (
+                        <span key={tag} className="text-xs font-black text-gray-600">#{tag}</span>
+                    ))}
+                </div>
+                <div className="mt-3 border-t border-gray-100 pt-3 text-xs font-bold text-gray-500">
+                    좋아요 {post.likes} · 답변 {post.comments}
+                </div>
+            </article>
+        );
+    }
+
     return (
         <article className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="relative aspect-[4/3] bg-gray-100">
@@ -1874,7 +2587,7 @@ function ProfilePostCard({ post, onClose }: { post: CommunityPost; onClose: () =
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                     {post.tags.slice(0, 4).map((tag) => (
-                        <span key={tag} className="text-xs font-black text-blue-600">#{tag}</span>
+                        <span key={tag} className="text-xs font-black text-gray-600">#{tag}</span>
                     ))}
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3 text-xs font-bold text-gray-500">

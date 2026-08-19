@@ -20,6 +20,7 @@ import {
 } from "@/lib/follows";
 import { Bell, Camera, ChevronRight, Globe2, LockKeyhole, Minus, Pencil, Plus, Shield, Trash2, Users, X } from "lucide-react";
 import Link from "next/link";
+import NextImage from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 export default function MyPage() {
@@ -248,7 +249,7 @@ export default function MyPage() {
                             <div className="-mt-12 flex items-end gap-3">
                                 <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-black text-3xl font-black text-white shadow-sm">
                                     {profileImageUrl ? (
-                                        <img src={profileImageUrl} alt="프로필 사진" className="h-full w-full object-cover" />
+                                        <NextImage src={profileImageUrl} alt="프로필 사진" fill sizes="96px" unoptimized className="object-cover" />
                                     ) : (
                                         (me?.nickname || me?.email || "U").slice(0, 1)
                                     )}
@@ -711,7 +712,7 @@ function PlanBadge({ children, tone = "neutral" }: { children: React.ReactNode; 
 }
 
 function templateLabel(template: TravelPlanIndexItem["template"]) {
-    if (template === "spreadsheet") return "스프레드시트";
+    if (template === "spreadsheet") return "테이블형";
     if (template === "timeline") return "트립 보드";
     if (template === "route_sheet") return "루트 시트";
     return "기본 템플릿";
@@ -726,8 +727,8 @@ function tierLabel(tier: TravelPlanIndexItem["tier"]) {
 function ProfileAvatar({ value }: { value: string }) {
     const isImage = value?.startsWith("data:image/") || value?.startsWith("http://") || value?.startsWith("https://");
     return (
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-950 text-sm font-black text-white">
-            {isImage ? <img src={value} alt="프로필 사진" className="h-full w-full object-cover" /> : value}
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-950 text-sm font-black text-white">
+            {isImage ? <NextImage src={value} alt="프로필 사진" fill sizes="44px" unoptimized className="object-cover" /> : value}
         </div>
     );
 }
@@ -825,11 +826,14 @@ function ProfileCropDialog({
                         lastPointRef.current = null;
                     }}
                 >
-                    <img
+                    <NextImage
                         src={source}
                         alt="전체 사진 미리보기"
+                        fill
+                        sizes="min(90vw, 560px)"
+                        unoptimized
                         draggable={false}
-                        className="h-full w-full select-none object-contain"
+                        className="select-none object-contain"
                         style={{ transform: `scale(${scale})` }}
                     />
                     <div className="pointer-events-none absolute inset-0 bg-black/20" />

@@ -1,88 +1,80 @@
-# 🗺️ INTP (Intelligent Navigation & Trip Planner)
+# INTP 여행 플래너
 
-INTP(인팁)는 고도화된 여행 경로 최적화 및 스마트한 일정 관리를 지원하는 지능형 여행 계획 플랫폼(Intelligent Navigation & Trip Planner)입니다. 사용자 중심의 현대적이고 세련된 UX/UI 시스템을 기반으로 직관적인 지도 인터페이스, 양방향 드래그 앤 드롭 일정 관리, 그리고 실시간 엑셀형 계획 템플릿을 제공합니다.
+여행 일정 작성, 장소 검색, 경로 최적화, 공동 편집, 커뮤니티 공유를 제공하는 웹 애플리케이션입니다.
 
----
+## 구성
 
-## ✨ 주요 기능 (Key Features)
+- Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS 4
+- Backend: Java 17, Spring Boot 4, JPA, WebFlux, WebSocket
+- Data: MySQL 8, Redis 7, PostgreSQL/PostGIS, GTFS
+- Place search: Nominatim Korea/Japan, Photon Japan, 로컬 검색 메모리
+- ML: PyTorch 여행지 추천과 일정 생성 파이프라인
+- Infra: Docker Compose, nginx, certbot
 
-### 1. 스마트 일정 재정렬 시스템 (Smart Reordering System)
-- **데스크톱 및 모바일 최적화**: 
-  - 마우스 드래그 앤 드롭(`@dnd-kit`)을 통한 자유로운 일정 위치 수정이 가능합니다.
-  - **모바일 원터치 조작 UX**: 모바일 화면에서 순서 숫자를 가볍게 탭하면 위/아래 이동을 선택할 수 있는 세련된 **글래스모피즘 컨텍스트 팝오버 메뉴**를 제공하여 손쉬운 정렬이 가능합니다.
-  - 모바일 터치 오동작 및 드래그-스크롤 충돌을 원천 방지하기 위해 터치 미세 감도 보정 센서 필터가 적용되어 있습니다.
+## 디렉터리
 
-### 2. 다중 스타일 계획 템플릿 (Multi-Template Planning)
-- **일반형 템플릿 (Basic Itinerary)**: 동적 시간 및 카드 배치 뷰어.
-- **엑셀 스프레드시트 템플릿 (Excel Spreadsheet)**: 열(Day)과 행(일정/식비)을 한눈에 보며 대량의 정보를 직관적으로 기입 및 합산할 수 있는 오피스형 인터페이스.
+```text
+frontend/                 Next.js 애플리케이션
+src/main/java/com/infp/   Spring Boot 백엔드
+src/test/java/com/infp/   백엔드 테스트
+db/                       DB 초기 스키마
+docker/photon/            Photon 이미지와 시작 스크립트
+ml/recommender/           추천 모델 학습과 추론
+scripts/                  데이터 및 운영 스크립트
+docs/                     설계와 구현 문서
+```
 
-### 3. 실시간 다크 모드 & 테마 통합 로고 (Modern Dark Mode)
-- **옵시디언 다크 테마**: 저조도 환경에서도 눈이 편안한 트렌디한 다크 스킨 시스템이 통합되어 있습니다.
-- **유기적 로고 이미지 스위처**: 
-  - 라이트 모드에서는 부드러운 파스텔 그라데이션 기반의 `icon.svg`가 활성화됩니다.
-  - 다크 모드에서는 깊이감 있는 어두운 슬레이트 바탕의 `icon_dark.svg`가 렌더링됩니다.
-  - 서버 사이드 렌더링(SSR) 수분 공급 불일치(Hydration Mismatch) 현상 및 테마 로딩 깜빡임이 발생하지 않도록 순수 CSS 결합형 로직으로 처리되어 있습니다.
+## Docker 실행
 
-### 4. 고도화된 경로 최적화 (Route Optimization)
-- **공간 분석 통합**: PostGIS 및 오픈스트리트맵(OSM) 연동을 통하여 실제 공간 좌표에 기반한 정밀한 여행 경로 계산 및 최적 경로 렌더링을 제공합니다.
+```powershell
+docker compose up -d --build
+docker compose ps
+```
 
----
+관리자 여행 데이터 수집 화면은 `http://localhost/admin/ml-ingest`에서 열 수 있습니다. 이미지 최대 10장을 한 여행의 연속 페이지로 합치거나 사진별 별도 일정으로 순차 처리할 수 있습니다. 추출 결과는 기본 템플릿의 시간·장소·내용 행으로 검수하며, 승인하면 학습 시드와 관리자 소유 여행 계획에 함께 반영됩니다.
 
-## 🛠️ 기술 스택 (Tech Stack)
+WSL 메모리는 `C:\Users\pinea\.wslconfig`에서 10GB로 제한합니다. 도쿄 개발 모드에서는 일본 Nominatim을 기본으로 사용하고 한국 Nominatim과 Photon은 필요할 때 profile로 실행합니다.
 
-### Frontend
-- **Core**: Next.js 16 (App Router, TypeScript)
-- **Styling**: Tailwind CSS 4, PostCSS
-- **State Management**: Zustand
-- **Interactions**: @dnd-kit (Core, Sortable, Utilities), Lucide React (Icons)
+## Photon 일본 검색
 
-### Backend
-- **Core Framework**: Spring Boot
-- **Language**: Java
+Photon 일본 인덱스는 최초 실행 때 `data/photon`에 다운로드됩니다. 현재 Compose 제한은 Photon 컨테이너 1GB, Java 힙 512MB입니다. 기본 일본 검색은 `nominatim-jp`이며 Photon은 `photon` profile이 활성화된 경우에만 사용합니다.
 
-### Web Server & Infrastructure
-- **Reverse Proxy / Static Hosting**: Nginx
-- **Containerization**: Docker, Docker Compose
+핵심 설계와 운영 문서는 [핵심 명세서 안내](docs/essential-specs.md)에서 확인합니다.
 
-### Database & Cache
-- **Spatial Data / Main Relational DB**: PostGIS, MySQL
-- **NoSQL Documents**: MongoDB
-- **Performance Cache / Session Storage**: Redis
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-photon.ps1
+docker compose --profile photon logs -f photon
+curl.exe http://127.0.0.1:2322/status
+```
 
----
+Photon을 사용하지 않을 때:
 
-## 🚀 시작하기 (Getting Started)
+```powershell
+docker compose --profile photon stop photon
+docker compose --profile korea up -d nominatim
+```
 
-### 프론트엔드 로컬 개발 환경 실행 (Frontend Setup)
+장소 번역은 로컬 LibreTranslate와 Argos Translate의 한국어·영어·일본어 모델을 사용합니다. 한국어 검색어는 영어와 일본어 후보로 확장되고 외국어 결과 제목은 한국어로 변환됩니다. 번역은 Redis에 30일 캐시되며 로컬 번역기가 준비되지 않았을 때는 OSM 다국어 이름과 정적 별칭 검색으로 자동 전환됩니다.
 
-1. **의존성 모듈 설치**
-   ```bash
-   cd frontend
-   npm install
-   ```
+## 개발 실행
 
-2. **개발용 데브 서버 구동**
-   ```bash
-   npm run dev
-   ```
-   브라우저에서 `http://localhost:3000`으로 접속하여 확인합니다.
+```powershell
+./gradlew.bat bootRun
 
-3. **프로덕션 빌드**
-   ```bash
-   npm run build
-   npm start
-   ```
----
+cd frontend
+npm install
+npm run dev
+```
 
-## 📄 오픈소스 및 라이선스 고지 (Open Source Acknowledgements)
+## 검증
 
-본 프로젝트는 서비스 품질 및 정밀한 지리 공간 분석을 위해 아래 오픈소스 데이터와 라이브러리를 공식적으로 사용합니다.
+```powershell
+./gradlew.bat test
+docker compose config --quiet
 
-- **OpenStreetMap (OSM)**
-  - © OpenStreetMap 기여자
-  - [https://www.openstreetmap.org/](https://www.openstreetmap.org/)
-  - ODbL(오픈 데이터베이스 라이선스)에 의거하여 데이터를 활용합니다.
-- **ODPT (일본 대중교통 오픈데이터 센터)**
-  - [https://www.odpt.org/](https://www.odpt.org/)
-  - 일본 대중교통 노선 시간표 및 실시간 데이터 조회 목적으로 활용 중입니다.
-  - 데이터 제공처는 정보의 실시간 무결성이나 정밀도를 100% 보증하지 않습니다.
+cd frontend
+npm run lint
+npm run build
+```
+
+추천 모델과 이미지 일정 변환은 [ml/recommender/README.md](ml/recommender/README.md), 프론트엔드 명령은 [frontend/README.md](frontend/README.md)를 참고합니다.

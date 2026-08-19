@@ -223,7 +223,7 @@ function displayText(value: string | undefined, fallback: string) {
 }
 
 function planTemplateLabel(template: TravelPlanDraft["template"]) {
-    if (template === "spreadsheet") return "일정표형";
+    if (template === "spreadsheet") return "테이블형";
     if (template === "timeline") return "트립 보드";
     if (template === "route_sheet") return "루트 시트";
     return "기본형";

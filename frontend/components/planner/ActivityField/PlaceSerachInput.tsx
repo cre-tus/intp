@@ -1,7 +1,7 @@
 import { Globe2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { loadGoogleMaps, type GoogleMap, type GoogleMarker } from "@/lib/googleMaps";
-import type { TravelCountryCode } from "@/lib/travelPlans";
+import { loadAdminGoogleMaps, loadGoogleMaps, type GoogleMap, type GoogleMarker } from "@/lib/googleMaps";
+import type { TravelCountryCode, TravelPlanTier } from "@/lib/travelPlans";
 
 export type PlaceResult = {
     id: string;
@@ -13,6 +13,7 @@ export type PlaceResult = {
     subtitle: string;
     lat: number;
     lon: number;
+    provider?: string;
 };
 
 type PlaceApiResult = {
@@ -25,6 +26,7 @@ type PlaceApiResult = {
     subtitle: string;
     lat: number | string;
     lon: number | string;
+    provider?: string;
 };
 
 type SearchProvider = "local" | "google";
@@ -99,13 +101,22 @@ function loadLeaflet(): Promise<LeafletApi> {
 export default function PlaceSearchInput(props: {
     onSelect: (place: PlaceResult) => void;
     initialQuery?: string;
+    initialLat?: number | null;
+    initialLon?: number | null;
     showFixedOption?: boolean;
     fixedOptionChecked?: boolean;
     onFixedOptionChange?: (checked: boolean) => void;
     paidPlaces?: boolean;
+    tier?: TravelPlanTier;
     planId?: string;
+    planTitle?: string;
     countryCode?: TravelCountryCode;
     origin?: PlaceSearchOrigin | null;
+    onUpgradeRequested?: () => void;
+    onTierSynced?: (tier: TravelPlanTier) => void;
+    adminGoogleSearch?: boolean;
+    preferNearby?: boolean;
+    knownPlaces?: PlaceResult[];
 }) {
     const mapElementRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -118,51 +129,65 @@ export default function PlaceSearchInput(props: {
     const [items, setItems] = useState<PlaceResult[]>([]);
     const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
     const [manualName, setManualName] = useState(props.initialQuery ?? "");
-    const [manualLat, setManualLat] = useState("");
-    const [manualLon, setManualLon] = useState("");
+    const hasInitialCoords = props.initialLat != null && props.initialLon != null &&
+        Number.isFinite(props.initialLat) && Number.isFinite(props.initialLon) &&
+        props.initialLat >= -90 && props.initialLat <= 90 &&
+        props.initialLon >= -180 && props.initialLon <= 180;
+    const [manualLat, setManualLat] = useState(() => hasInitialCoords ? String(props.initialLat) : "");
+    const [manualLon, setManualLon] = useState(() => hasInitialCoords ? String(props.initialLon) : "");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [mapError, setMapError] = useState("");
-    const [sortMode, setSortMode] = useState<SortMode>("relevance");
+    const [sortMode, setSortMode] = useState<SortMode>(() => hasInitialCoords || props.preferNearby ? "distance" : "relevance");
     const countryCode = props.countryCode ?? "KR";
-    const mapCenter = COUNTRY_CENTERS[countryCode] ?? COUNTRY_CENTERS.KR;
+    const mapCenter: LatLngTuple = hasInitialCoords
+        ? [props.initialLat!, props.initialLon!]
+        : (COUNTRY_CENTERS[countryCode] ?? COUNTRY_CENTERS.KR);
 
     const parsedLat = Number(manualLat);
     const parsedLon = Number(manualLon);
+    const hasManualCoords = manualLat.trim() !== "" && manualLon.trim() !== "" &&
+        Number.isFinite(parsedLat) && Number.isFinite(parsedLon) &&
+        parsedLat >= -90 && parsedLat <= 90 && parsedLon >= -180 && parsedLon <= 180;
+    const effectiveOrigin = useMemo<PlaceSearchOrigin | null>(() => hasManualCoords
+        ? { lat: parsedLat, lon: parsedLon, name: manualName.trim() || props.initialQuery || "선택 좌표" }
+        : props.origin ?? null,
+    [hasManualCoords, manualName, parsedLat, parsedLon, props.initialQuery, props.origin]);
     const canAdd =
         manualName.trim().length > 0 &&
-        Number.isFinite(parsedLat) &&
-        Number.isFinite(parsedLon) &&
-        parsedLat >= -90 &&
-        parsedLat <= 90 &&
-        parsedLon >= -180 &&
-        parsedLon <= 180;
+        hasManualCoords;
 
     const normalizedQuery = q.trim();
-    const googleEnabled = Boolean(props.paidPlaces && props.planId);
-    const googleMapEnabled = Boolean(props.paidPlaces && props.planId);
+    const googleEnabled = Boolean(props.adminGoogleSearch || (props.paidPlaces && props.planId));
+    const googleMapEnabled = Boolean(props.adminGoogleSearch || (props.paidPlaces && props.planId));
     const canGoogleSearch = googleEnabled && normalizedQuery.length >= 2;
-    const rankedItems = useMemo(() => rankPlacesByOrigin(items, props.origin, sortMode), [items, props.origin, sortMode]);
+    const knownPlaces = useMemo(() => deduplicatePlaces(props.knownPlaces ?? []), [props.knownPlaces]);
+    const rankedItems = useMemo(() => rankPlacesByOrigin(items, effectiveOrigin, sortMode), [items, effectiveOrigin, sortMode]);
 
     useEffect(() => {
-        if (!props.origin && sortMode === "distance") setSortMode("relevance");
-    }, [props.origin, sortMode]);
+        if (!effectiveOrigin && sortMode === "distance") setSortMode("relevance");
+    }, [effectiveOrigin, sortMode]);
+
+    useEffect(() => {
+        if (hasManualCoords) setSortMode("distance");
+    }, [hasManualCoords]);
 
     const runSearch = useCallback(async (nextProvider: SearchProvider = provider) => {
         const query = q.trim();
         if (!query || (nextProvider === "google" && query.length < 2)) {
-            setItems([]);
+            setItems(nextProvider === "local" ? knownPlaces : []);
             return;
         }
         if (nextProvider === "google" && !googleEnabled) {
-            setError("유료 템플릿에서만 Google 장소 검색을 사용할 수 있습니다.");
+            setError("Google 장소 검색을 사용할 수 없는 상태입니다.");
             return;
         }
 
-        const cacheKey = `${nextProvider}:${countryCode}:${query.toLowerCase()}`;
+        const coordinateKey = effectiveOrigin ? `${effectiveOrigin.lat.toFixed(5)},${effectiveOrigin.lon.toFixed(5)}` : "none";
+        const cacheKey = `${nextProvider}:${countryCode}:${query.toLowerCase()}:${coordinateKey}`;
         const cached = searchCacheRef.current.get(cacheKey);
         if (cached) {
-            setItems(cached);
+            setItems(mergeKnownPlaces(query, knownPlaces, cached));
             setError("");
             return;
         }
@@ -171,28 +196,30 @@ export default function PlaceSearchInput(props: {
         setError("");
         try {
             const url = nextProvider === "google"
-                ? `/api/place/google/search?planId=${encodeURIComponent(props.planId ?? "")}&countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`
-                : `/api/place/autocomplete?countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`;
+                ? props.adminGoogleSearch
+                    ? `/api/admin/ml-ingest/place-search/google?countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`
+                    : `/api/place/google/search?planId=${encodeURIComponent(props.planId ?? "")}&countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}`
+                : `/api/place/autocomplete?countryCode=${encodeURIComponent(countryCode)}&q=${encodeURIComponent(query)}${effectiveOrigin ? `&lat=${effectiveOrigin.lat}&lon=${effectiveOrigin.lon}` : ""}`;
             const res = await fetch(url);
             if (!res.ok) {
                 const message = await res.text();
                 throw new Error(message || "장소 검색에 실패했습니다.");
             }
             const data = await res.json() as PlaceApiResult[];
-            const mapped = data.map(toPlaceResult);
+            const mapped = deduplicatePlaces(data.map(toPlaceResult));
             searchCacheRef.current.set(cacheKey, mapped);
-            setItems(mapped);
+            setItems(mergeKnownPlaces(query, knownPlaces, mapped));
         } catch (err) {
             setError(err instanceof Error ? err.message : "장소 검색에 실패했습니다.");
         } finally {
             setLoading(false);
         }
-    }, [countryCode, googleEnabled, props.planId, provider, q]);
+    }, [countryCode, effectiveOrigin, googleEnabled, knownPlaces, props.adminGoogleSearch, props.planId, provider, q]);
 
     useEffect(() => {
         if (provider !== "local") return;
         if (!normalizedQuery) {
-            const timer = setTimeout(() => setItems([]), 0);
+            const timer = setTimeout(() => setItems(knownPlaces), 0);
             return () => clearTimeout(timer);
         }
 
@@ -200,21 +227,25 @@ export default function PlaceSearchInput(props: {
             void runSearch("local");
         }, 350);
         return () => clearTimeout(timer);
-    }, [normalizedQuery, provider, runSearch]);
+    }, [knownPlaces, normalizedQuery, provider, runSearch]);
 
     useEffect(() => {
         let mounted = true;
-        if (googleMapEnabled && props.planId) {
-            loadGoogleMaps(props.planId)
+        if (googleMapEnabled && (props.adminGoogleSearch || props.planId)) {
+            const loader = props.adminGoogleSearch ? loadAdminGoogleMaps() : loadGoogleMaps(props.planId!);
+            loader
                 .then((googleMaps) => {
                     if (!mounted || !mapElementRef.current || googleMapRef.current) return;
                     const map = new googleMaps.Map(mapElementRef.current, {
                         center: { lat: mapCenter[0], lng: mapCenter[1] },
-                        zoom: 12,
+                        zoom: hasInitialCoords ? 15 : 12,
                         mapTypeControl: false,
                         streetViewControl: false,
                         fullscreenControl: false,
                     });
+                    if (hasInitialCoords) {
+                        placeGoogleMarker(googleMaps, map, googleMarkerRef, props.initialLat!, props.initialLon!, props.initialQuery || "기존 선택 위치");
+                    }
                     map.addListener("click", (event) => {
                         const latLng = event.latLng;
                         if (!latLng) return;
@@ -244,7 +275,7 @@ export default function PlaceSearchInput(props: {
                 const map = L.map(mapElementRef.current, {
                     zoomControl: true,
                     attributionControl: false,
-                }).setView(mapCenter, 12);
+                }).setView(mapCenter, hasInitialCoords ? 15 : 12);
 
                 const localTiles = L.tileLayer(TILE_URL, { maxZoom: 19 }).addTo(map);
                 localTiles.on?.("tileerror", () => {
@@ -256,6 +287,10 @@ export default function PlaceSearchInput(props: {
                         }).addTo(map);
                     }
                 });
+
+                if (hasInitialCoords) {
+                    placeMarker(L, map, markerRef, props.initialLat!, props.initialLon!, props.initialQuery || "기존 선택 위치");
+                }
 
                 map.on("click", (event) => {
                     const lat = Number(event.latlng.lat.toFixed(6));
@@ -275,7 +310,7 @@ export default function PlaceSearchInput(props: {
         return () => {
             mounted = false;
         };
-    }, [googleMapEnabled, mapCenter, props.planId]);
+    }, [googleMapEnabled, hasInitialCoords, mapCenter, props.adminGoogleSearch, props.initialLat, props.initialLon, props.initialQuery, props.planId]);
 
     const selectPlace = (item: PlaceResult) => {
         if (!hasValidCoordinates(item.lat, item.lon)) {
@@ -283,11 +318,12 @@ export default function PlaceSearchInput(props: {
             return;
         }
         setSelectedPlace(item);
-        setManualName(item.title);
+        setManualName(item.displayTitle?.trim() || item.title);
         setManualLat(String(item.lat));
         setManualLon(String(item.lon));
-        if (googleMapRef.current && props.planId) {
-            loadGoogleMaps(props.planId)
+        if (googleMapRef.current && (props.adminGoogleSearch || props.planId)) {
+            const loader = props.adminGoogleSearch ? loadAdminGoogleMaps() : loadGoogleMaps(props.planId!);
+            loader
                 .then((googleMaps) => {
                     if (!googleMapRef.current) return;
                     placeGoogleMarker(googleMaps, googleMapRef.current, googleMarkerRef, item.lat, item.lon, item.displayTitle ?? item.title);
@@ -317,8 +353,9 @@ export default function PlaceSearchInput(props: {
             subtitle: selectedPlace?.subtitle ?? `${parsedLat.toFixed(6)}, ${parsedLon.toFixed(6)}`,
             lat: parsedLat,
             lon: parsedLon,
+            provider: selectedPlace?.provider,
         };
-        void recordPlaceSelection(place, q, selectedPlace ? provider : "manual", props.planId);
+        void recordPlaceSelection(place, q, selectedPlace?.provider ?? (selectedPlace ? provider : "manual"), props.planId, countryCode);
         props.onSelect(place);
     };
 
@@ -340,7 +377,7 @@ export default function PlaceSearchInput(props: {
                         />
                     </div>
 
-                    {props.paidPlaces && (
+                    {Boolean(props.paidPlaces || props.adminGoogleSearch) && (
                         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
                             <button
                                 type="button"
@@ -430,8 +467,8 @@ export default function PlaceSearchInput(props: {
                 <div className="mt-3 max-h-[220px] overflow-auto rounded-lg border border-gray-200 sm:max-h-[320px]">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
                         <div className="text-xs font-bold text-gray-600">
-                            {props.origin
-                                ? <>이전 경로{props.origin.name ? ` "${props.origin.name}"` : ""} 기준</>
+                            {effectiveOrigin
+                                ? <>{hasManualCoords ? "기존 선택된 경로" : "이전 경로"}{effectiveOrigin.name ? ` "${effectiveOrigin.name}"` : ""} 기준</>
                                 : "검색 결과"}
                         </div>
                         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
@@ -444,7 +481,7 @@ export default function PlaceSearchInput(props: {
                             </button>
                             <button
                                 type="button"
-                                disabled={!props.origin}
+                                disabled={!effectiveOrigin}
                                 onClick={() => setSortMode("distance")}
                                 className={`rounded-md px-2.5 py-1 text-xs font-black ${sortMode === "distance" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"} disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent`}
                             >
@@ -469,7 +506,12 @@ export default function PlaceSearchInput(props: {
                                         onClick={() => selectPlace(item)}
                                     >
                                         <div className="flex items-start justify-between gap-3">
-                                            <div className="min-w-0 font-medium">{item.displayTitle ?? item.title}</div>
+                                            <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-1.5 font-medium">
+                                                    <span>{item.displayTitle ?? item.title}</span>
+                                                    <ProviderBadge provider={item.provider} />
+                                                </div>
+                                            </div>
                                             {item.distanceFromOriginKm !== null && (
                                                 <span className="shrink-0 rounded-full bg-gray-950 px-2 py-0.5 text-[11px] font-black text-white">
                                                     {formatDistanceKm(item.distanceFromOriginKm)}
@@ -479,7 +521,7 @@ export default function PlaceSearchInput(props: {
                                         <div className="mt-0.5 text-xs text-gray-500">{item.subtitle}</div>
                                         {item.distanceFromOriginKm !== null && (
                                             <div className="mt-1 text-xs font-semibold text-gray-600">
-                                                이전 경로에서 {formatDistanceKm(item.distanceFromOriginKm)}
+                                                {hasManualCoords ? "기존 선택된 경로에서" : "이전 경로에서"} {formatDistanceKm(item.distanceFromOriginKm)}
                                             </div>
                                         )}
                                         {!hasValidCoordinates(item.lat, item.lon) && (
@@ -505,6 +547,57 @@ export default function PlaceSearchInput(props: {
     );
 }
 
+export function ProviderBadge({ provider }: { provider?: string }) {
+    const norm = (provider || "nominatim").toLowerCase();
+    if (norm === "custom") {
+        return (
+            <span className="shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-black text-violet-700">
+                Custom
+            </span>
+        );
+    }
+    if (norm === "redis") {
+        return (
+            <span className="shrink-0 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-black text-rose-700">
+                Redis
+            </span>
+        );
+    }
+    if (norm === "photon") {
+        return (
+            <span className="shrink-0 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-800">
+                Photon
+            </span>
+        );
+    }
+    if (norm === "google") {
+        return (
+            <span className="shrink-0 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-black text-blue-700">
+                Google
+            </span>
+        );
+    }
+    if (norm === "overpass") {
+        return (
+            <span className="shrink-0 rounded border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 text-[10px] font-black text-cyan-800">
+                Overpass
+            </span>
+        );
+    }
+    if (norm === "plan") {
+        return (
+            <span className="shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-black text-violet-700">
+                현재 일정
+            </span>
+        );
+    }
+    return (
+        <span className="shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-800">
+            Nominatim
+        </span>
+    );
+}
+
 function toPlaceResult(item: PlaceApiResult): PlaceResult {
     return {
         id: item.id,
@@ -516,7 +609,41 @@ function toPlaceResult(item: PlaceApiResult): PlaceResult {
         subtitle: item.subtitle,
         lat: Number(item.lat),
         lon: Number(item.lon),
+        provider: item.provider || inferProviderFromId(item.id),
     };
+}
+
+function deduplicatePlaces(items: PlaceResult[]) {
+    const unique = new Map<string, PlaceResult>();
+    items.forEach((item) => {
+        const key = item.id || `${item.lat.toFixed(6)},${item.lon.toFixed(6)}`;
+        unique.set(key, item);
+    });
+    return [...unique.values()];
+}
+
+function mergeKnownPlaces(query: string, knownPlaces: PlaceResult[], remotePlaces: PlaceResult[]) {
+    const normalized = query.trim().toLocaleLowerCase();
+    const matchingKnown = knownPlaces.filter((place) => [
+        place.title,
+        place.displayTitle,
+        place.titleKo,
+        place.titleEn,
+        place.titleJa,
+        place.subtitle,
+    ].some((value) => value?.toLocaleLowerCase().includes(normalized)));
+    return deduplicatePlaces([...matchingKnown, ...remotePlaces]);
+}
+
+function inferProviderFromId(id?: string): string {
+    if (!id) return "nominatim";
+    const lower = id.toLowerCase();
+    if (lower.startsWith("redis:") || lower.startsWith("cache:")) return "redis";
+    if (lower.startsWith("google:") || lower.startsWith("google")) return "google";
+    if (lower.startsWith("photon:")) return "photon";
+    if (lower.startsWith("custom:")) return "custom";
+    if (lower.startsWith("place:") || lower.startsWith("nominatim:")) return "nominatim";
+    return "nominatim";
 }
 
 function hasValidCoordinates(lat: number, lon: number) {
@@ -567,7 +694,7 @@ function formatDistanceKm(value: number) {
     return `${value.toFixed(value < 10 ? 1 : 0)}km`;
 }
 
-async function recordPlaceSelection(place: PlaceResult, query: string, provider: SearchProvider | "manual", planId?: string) {
+async function recordPlaceSelection(place: PlaceResult, query: string, provider: string, planId?: string, countryCode?: TravelCountryCode) {
     try {
         await fetch("/api/place/selection", {
             method: "POST",
@@ -577,6 +704,7 @@ async function recordPlaceSelection(place: PlaceResult, query: string, provider:
                 query,
                 provider,
                 planId,
+                countryCode,
             }),
         });
     } catch {

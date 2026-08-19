@@ -2,6 +2,9 @@ package com.infp.place.service;
 
 import com.infp.place.dto.PlaceItem;
 import com.infp.place.entity.PlaceMemoryEntity;
+import com.infp.place.util.KoreanPlaceNameResolver;
+import com.infp.place.util.PlaceTextSimilarity;
+import com.infp.place.util.QueryVariantBuilder;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -15,7 +18,7 @@ public class PlaceRankingModel {
         String title = normalize(item.title());
         String displayTitle = normalize(item.displayTitle());
         String subtitle = normalize(item.subtitle());
-        double score = item.importance();
+        double score = Math.log1p(Math.max(0.0, item.importance())) * 0.8;
 
         if (title.equals(normalizedQuery) || displayTitle.equals(normalizedQuery)) score += 6.0;
         if (title.startsWith(normalizedQuery) || displayTitle.startsWith(normalizedQuery)) score += 4.0;
@@ -28,14 +31,35 @@ public class PlaceRankingModel {
             if (subtitle.contains(token)) score += 0.2;
         }
 
+        if (PlaceTextSimilarity.compact(query).length() >= 2) {
+            double titleSimilarity = java.util.stream.Stream.of(
+                            item.title(), item.displayTitle(), item.titleKo(), item.titleEn(), item.titleJa()
+                    )
+                    .mapToDouble(candidate -> PlaceTextSimilarity.score(query, candidate))
+                    .max()
+                    .orElse(0.0);
+            score += titleSimilarity * 4.0;
+            if (titleSimilarity >= 0.88) score += 1.5;
+            score += PlaceTextSimilarity.score(query, item.subtitle()) * 0.8;
+        }
+
         return score;
     }
 
     public double scoreMemory(String query, PlaceMemoryEntity place) {
-        double score = score(query, toPlaceItem(place));
-        score += Math.log1p(Math.max(0, place.getSelectionCount())) * 1.8;
+        double score = scoreWithVariants(query, toPlaceItem(place, query));
+        score += Math.min(2.0, Math.log1p(Math.max(0, place.getSelectionCount())) * 0.8);
         score += recencyBoost(place.getLastSelectedAt());
         return score;
+    }
+
+    public double scoreWithVariants(String query, PlaceItem item) {
+        double best = score(query, item);
+        for (String variant : QueryVariantBuilder.build(query)) {
+            if (variant.equalsIgnoreCase(query)) continue;
+            best = Math.max(best, score(variant, item) * 0.92);
+        }
+        return best;
     }
 
     private double recencyBoost(LocalDateTime lastSelectedAt) {
@@ -47,19 +71,26 @@ public class PlaceRankingModel {
         return 0;
     }
 
-    private PlaceItem toPlaceItem(PlaceMemoryEntity place) {
+    private PlaceItem toPlaceItem(PlaceMemoryEntity place, String query) {
+        String titleKo = KoreanPlaceNameResolver.resolveTitle(
+                place.getTitleKo(), query, place.getTitle(), place.getTitleEn(), place.getTitleJa(), place.getSubtitle()
+        );
+        String title = titleKo.isBlank() ? place.getTitle() : titleKo;
+        String displayTitle = titleKo.isBlank() ? place.getDisplayTitle() : titleKo;
         return new PlaceItem(
                 place.getSource() + ":" + place.getSourcePlaceId(),
-                place.getTitle(),
-                place.getDisplayTitle(),
-                place.getTitleKo(),
+                title,
+                displayTitle,
+                titleKo,
                 place.getTitleEn(),
                 place.getTitleJa(),
-                place.getSubtitle(),
+                KoreanPlaceNameResolver.localizeSubtitle(place.getSubtitle()),
                 place.getLat(),
                 place.getLon(),
                 Math.log1p(Math.max(0, place.getSelectionCount())),
-                place.getSelectedQuery()
+                place.getSelectedQuery(),
+                place.getCategory(),
+                place.getPlaceType()
         );
     }
 
@@ -67,5 +98,9 @@ public class PlaceRankingModel {
         return value == null
                 ? ""
                 : value.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    static String fuzzyPrefix(String value) {
+        return PlaceTextSimilarity.searchPrefix(value, 3);
     }
 }

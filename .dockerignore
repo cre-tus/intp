@@ -4,6 +4,7 @@
 build
 node_modules
 db/gtfs
+db/gtfs.zip
 frontend/node_modules
 frontend/.next
 frontend/out
@@ -11,5 +12,9 @@ frontend/build
 nominatim
 certbot
 tiles
+uploads
+result
+data
+ml/recommender/artifacts
 *.log
 *.tmp

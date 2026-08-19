@@ -67,7 +67,7 @@ export default function AdminPaymentsPage() {
         <RequireAuth>
             <main className="min-h-screen bg-gray-50">
                 <Header />
-                <section className="mx-auto max-w-6xl px-6 py-10">
+                <section className="mx-auto max-w-[1600px] px-4 py-10 sm:px-6 lg:px-8">
                     <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
                         <div>
                             <h1 className="text-3xl font-bold text-gray-950">결제 관리하기</h1>
@@ -90,8 +90,8 @@ export default function AdminPaymentsPage() {
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                            <div className="overflow-auto">
-                                <table className="w-full min-w-[1080px] border-collapse text-sm">
+                            <div className="max-w-full overflow-x-auto">
+                                <table className="w-full min-w-[1360px] border-collapse text-sm">
                                     <thead className="bg-gray-50 text-left">
                                     <tr>
                                         <Th>상태</Th>
@@ -111,20 +111,20 @@ export default function AdminPaymentsPage() {
                                         <tr key={request.id}>
                                             <Td><StatusBadge status={request.status} /></Td>
                                             <Td>
-                                                <div className="font-bold text-gray-950">{request.planTitle}</div>
-                                                <div className="mt-1 text-xs text-gray-500">{request.planId}</div>
+                                                <div className="max-w-64 break-words font-bold text-gray-950">{request.planTitle}</div>
+                                                <div className="mt-1 max-w-64 break-all text-xs text-gray-500">{request.planId}</div>
                                                 <div className="mt-1 text-xs text-gray-400">템플릿 ID별로 승인 상태가 적용됩니다.</div>
                                             </Td>
                                             <Td>
-                                                <div>{request.requesterNickname || request.requesterEmail}</div>
-                                                <div className="mt-1 text-xs text-gray-500">{request.requesterEmail}</div>
+                                                <div className="max-w-52 break-words">{request.requesterNickname || request.requesterEmail}</div>
+                                                <div className="mt-1 max-w-52 break-all text-xs text-gray-500">{request.requesterEmail}</div>
                                             </Td>
                                             <Td>{request.depositorName}</Td>
                                             <Td>{request.depositBank}</Td>
-                                            <Td>{request.depositAccount}</Td>
+                                            <Td><span className="whitespace-nowrap font-semibold tabular-nums">{request.depositAccount}</span></Td>
                                             <Td align="right">{request.amount.toLocaleString()}원</Td>
-                                            <Td>{new Date(request.createdAt).toLocaleString("ko-KR")}</Td>
-                                            <Td>{request.approvedAt ? new Date(request.approvedAt).toLocaleString("ko-KR") : "-"}</Td>
+                                            <Td><span className="whitespace-nowrap">{new Date(request.createdAt).toLocaleString("ko-KR")}</span></Td>
+                                            <Td><span className="whitespace-nowrap">{request.approvedAt ? new Date(request.approvedAt).toLocaleString("ko-KR") : "-"}</span></Td>
                                             <Td>
                                                 <button
                                                     type="button"
